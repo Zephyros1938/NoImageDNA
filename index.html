@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Canvas Hash Comparison</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 20px; background: #f8f9fa; }
+        .canvas-container { display: flex; gap: 20px; flex-wrap: wrap; margin-top: 20px; }
+        .frame { background: white; padding: 15px; border-radius: 8px; border: 1px solid #ddd; flex: 1; min-width: 300px; }
+        canvas { border: 1px solid #eee; display: block; width: 100%; height: auto; margin-bottom: 10px; }
+        .hash-box { font-family: monospace; font-size: 11px; background: #eee; padding: 8px; word-break: break-all; border-radius: 4px; border-left: 4px solid #555; }
+        .status { margin-top: 10px; font-weight: bold; padding: 10px; border-radius: 4px; display: none; }
+        .match { background: #d4edda; color: #155724; display: block; }
+        .mismatch { background: #f8d7da; color: #721c24; display: block; }
+    </style>
+</head>
+<body>
+
+    <h2>Image Hash Verification</h2>
+    <input type="file" id="imagePre" accept=".png, .jpg, .jpeg, .bmp">
+    <div id="compareStatus" class="status"></div>
+
+    <div class="canvas-container">
+        <div class="frame">
+            <h3>1. Original Upload</h3>
+            <canvas id="canvasOrig"></canvas>
+            <div class="hash-box" id="hashOrig">Hash: Pending...</div>
+        </div>
+
+        <div class="frame">
+            <h3>2. Encrypted Output</h3>
+            <canvas id="canvasEnc"></canvas>
+            <div class="hash-box" id="hashEnc">Hash: Pending...</div>
+        </div>
+
+        <div class="frame">
+            <h3>3. Decrypted (Re-Encrypted)</h3>
+            <canvas id="canvasDec"></canvas>
+            <div class="hash-box" id="hashDec">Hash: Pending...</div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { getPixels, encrypt } from './imageUtil.js';
+
+        const imagePreInput = document.getElementById("imagePre");
+        const statusDiv = document.getElementById("compareStatus");
+
+        // Helper to calculate SHA-256 of a Uint8ClampedArray
+        async function sha256(buffer) {
+            const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+
+        async function processImages(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const img = new Image();
+            img.onload = async () => {
+                const canvases = ['canvasOrig', 'canvasEnc', 'canvasDec'].map(id => document.getElementById(id));
+                const ctxs = canvases.map(c => c.getContext("2d", { willReadFrequently: true , colorSpace: 'srgb'}));
+                
+                canvases.forEach(c => { c.width = img.width; c.height = img.height; });
+
+                // --- STAGE 1: Original ---
+ctxs[0].drawImage(img, 0, 0);
+const rawOrig = ctxs[0].getImageData(0, 0, img.width, img.height).data;
+const hash1 = await sha256(rawOrig);
+document.getElementById('hashOrig').textContent = `SHA-256: ${hash1}`;
+
+// --- STAGE 2: Encrypt Once ---
+// We pass a copy of rawOrig to keep rawOrig pristine for the final comparison
+const encrypted1 = encrypt(new Uint8ClampedArray(rawOrig), img.width, img.height);
+ctxs[1].putImageData(new ImageData(new Uint8ClampedArray(encrypted1), img.width, img.height), 0, 0);
+const hash2 = await sha256(encrypted1);
+document.getElementById('hashEnc').textContent = `SHA-256: ${hash2}`;
+
+// --- STAGE 3: Encrypt Twice (Decrypt) ---
+// Use the data from encrypted1 directly to avoid canvas-read-back artifacts
+const encrypted2 = encrypt(new Uint8ClampedArray(encrypted1), img.width, img.height);
+ctxs[2].putImageData(new ImageData(new Uint8ClampedArray(encrypted2), img.width, img.height), 0, 0);
+const hash3 = await sha256(encrypted2);
+document.getElementById('hashDec').textContent = `SHA-256: ${hash3}`;
+                // --- COMPARE ---
+                if (hash1 === hash3) {
+                    statusDiv.textContent = "SUCCESS: Original and Double-Processed images are identical!";
+                    statusDiv.className = "status match";
+                } else {
+                    statusDiv.textContent = "MISMATCH: The encryption is not perfectly reversible.";
+                    statusDiv.className = "status mismatch";
+                }
+            };
+            img.src = URL.createObjectURL(file);
+        }
+
+        imagePreInput.addEventListener('change', processImages);
+    </script>
+</body>
+</html>
