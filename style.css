@@ -1,0 +1,60 @@
+body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      padding: 20px;
+      background: #f8f9fa;
+    }
+
+    .canvas-container {
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+      margin-top: 20px;
+    }
+
+    .frame {
+      background: white;
+      padding: 15px;
+      border-radius: 8px;
+      border: 1px solid #ddd;
+      flex: 1;
+      min-width: 300px;
+    }
+
+    canvas {
+      border: 1px solid #eee;
+      display: block;
+      width: 100%;
+      height: auto;
+      margin-bottom: 10px;
+      image-rendering: pixelated;
+    }
+
+    .hash-box {
+      font-family: monospace;
+      font-size: 11px;
+      background: #eee;
+      padding: 8px;
+      word-break: break-all;
+      border-radius: 4px;
+      border-left: 4px solid #555;
+    }
+
+    .status {
+      margin-top: 10px;
+      font-weight: bold;
+      padding: 10px;
+      border-radius: 4px;
+      display: none;
+    }
+
+    .match {
+      background: #d4edda;
+      color: #155724;
+      display: block;
+    }
+
+    .mismatch {
+      background: #f8d7da;
+      color: #721c24;
+      display: block;
+    }
