@@ -27,6 +27,7 @@ canvas {
   height: auto;
   margin-bottom: 10px;
   image-rendering: pixelated;
+  background-color: black;
 }
 
 .hash-box {

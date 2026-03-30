@@ -111,32 +111,22 @@ async function processImages(e) {
 
 imagePreInput.addEventListener('change', processImages);
 refreshPasses.onclick = function() {
-    passes = genPasses(document.getElementById("numPasses").value);
-    while (passwordsDisplayList.firstChild)
-    {
-    passwordsDisplayList.removeChild(passwordsDisplayList.firstChild);
-  }
-    console.log(passes)
+    const numPasses = document.getElementById("numPasses").value;
+    passes = genPasses(numPasses);
+    
+    passwordsDisplayList.innerHTML = "";
+    
+    console.log(passes);
     document.getElementById("passesVariance").innerText = `Password Variance: ${getPasswordVariation32(passes)}`;
 
-    const elem = document.createElement("p");
-    elem.style.fontFamily = "monospace"
+    let outputText = "";
     for (let i = 0; i < passes.length; i++) {
-
-    const pass = passes[i];
-
-
-    let passHex = pass.toString(16);
-    while (passHex.length < 8) {
-      passHex = "0" + passHex;
+        outputText += passes[i].toString(16).padStart(8, '0') + " ";
     }
-    elem.innerText += passHex;
-    elem.innerText += " ";
 
-
-    
-  }
-
+    const elem = document.createElement("p");
+    elem.style.fontFamily = "monospace";
+    elem.textContent = outputText;     
     passwordsDisplayList.appendChild(elem);
 }
 pHashSizeInput.addEventListener("input", function() {

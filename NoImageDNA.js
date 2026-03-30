@@ -87,14 +87,9 @@ function swap32(val) {
 }
 
 export function genPasses(count = 32) {
-  var passes = [];
-  for (let i = 0; i < count; i++) {
-    const array = new Uint32Array(1);
-self.crypto.getRandomValues(array);
-const secureRandom = array[0];
-    passes[i] = secureRandom;
-  }
-  return passes;
+  const array = new Uint32Array(count);
+  self.crypto.getRandomValues(array);
+  return Array.from(array);
 }
 
 export function getPasswordVariation32(p = BASIC_SET_PASSWORDS) {
