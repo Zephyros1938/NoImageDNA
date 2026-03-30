@@ -10,7 +10,7 @@ export function transform(pixels, width, height, decrypt = false, passwords = BA
   if(passwords == BASIC_SET_PASSWORDS) {
     console.warn("Using default passwords, this may be insecure.")
   }
-  const out = new Uint8ClampedArray(pixels);
+  const out = new Uint32Array(pixels.buffer);
   const p = passwords.map(password => [
     (password >>> 0) & 0xff,
     (password >>> 8) & 0xff,
@@ -18,15 +18,17 @@ export function transform(pixels, width, height, decrypt = false, passwords = BA
     (password >>> 24) & 0xff
   ]);
 
+  const masterKey = passwords.reduce((acc, p) => acc ^ p,0) >>> 0;
+
   if (decrypt) {
-    applyPassword(out, p.toReversed());
+    applyPassword(out, masterKey);
     applyInteractions(out);
   } else {
     reverseInteractions(out);
-    applyPassword(out, p);   
+    applyPassword(out, masterKey);   
   }
 
-  return out;
+  return new Uint8ClampedArray(out.buffer);
 }
 
 export function removeAlpha(pixels) {
@@ -37,30 +39,43 @@ export function removeAlpha(pixels) {
   return data;
 }
 
-function applyPassword(data, ps) {
-  for (const p of ps) {
-  for (let i = 0; i < data.length; i += 4) {
-    data[i]     ^= p[0];
-    data[i + 1] ^= p[1];
-    data[i + 2] ^= p[2];
-    data[i + 3] ^= p[3];
-  }}
-}
-
-function applyInteractions(data) {
-  for (let i = 0; i < data.length; i += 4) {
-    data[i]     ^= data[i + 1];
-    data[i + 1] ^= data[i + 2];
-    data[i + 2] ^= data[i + 3];
+function applyPassword(data, mkey) {
+  for (let i = 0; i < data.length; i++) {
+    data[i] ^= mkey;
   }
 }
 
-function reverseInteractions(data) {
-  for (let i = 0; i < data.length; i += 4) {
-    // Reverse the order of operations exactly
-    data[i + 2] ^= data[i + 3];
-    data[i + 1] ^= data[i + 2];
-    data[i]     ^= data[i + 1];
+function applyInteractions(data32) {
+  for (let i = 0; i < data32.length; i++) {
+    let pixel = data32[i];
+    let r = pixel & 0xFF;
+    let g = (pixel >> 8) & 0xFF;
+    let b = (pixel >> 16) & 0xFF;
+    let a = (pixel >> 24) & 0xFF;
+
+    r ^= g;
+    g ^= b;
+    b ^= a;
+
+    data32[i] = (r | (g << 8) | (b << 16) | (a << 24));
+  }
+}
+
+function reverseInteractions(data32) {
+  for (let i = 0; i < data32.length; i++) {
+    let pixel = data32[i];
+    let r = pixel & 0xFF;
+    let g = (pixel >> 8) & 0xFF;
+    let b = (pixel >> 16) & 0xFF;
+    let a = (pixel >> 24) & 0xFF;
+
+b ^= a;
+g ^= b;
+    r ^= g;
+    
+    
+
+    data32[i] = (r | (g << 8) | (b << 16) | (a << 24));
   }
 }
 
