@@ -70,3 +70,8 @@ canvas {
   display: block;
 }
 
+.closenessWarn {
+  background: #fff3cd; /* Soft warning yellow */
+  color: #856404;      /* Deep brownish-gold for readability */
+  display: block;
+}

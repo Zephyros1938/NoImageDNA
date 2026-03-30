@@ -98,3 +98,40 @@ export function getPasswordVariation32(p = BASIC_SET_PASSWORDS) {
   // A return of 0 is perfect. A return of 16 is bad (all 0s or all 1s).
   return Math.abs(16 - setBits);
 }
+
+/* 
+ * ImageDNA utils
+ */ 
+export async function getVisualFingerprint(canvas, size=8) {
+  const tempCanvas = document.createElement('canvas');
+  tempCanvas.width = size + 1; // Extra pixel for horizontal difference
+  tempCanvas.height = size;
+  const ctx = tempCanvas.getContext('2d');
+  
+  // 1. Grayscale and Resize (Standard Perceptual Pre-processing)
+  ctx.filter = 'grayscale(100%)';
+  ctx.drawImage(canvas, 0, 0, size + 1, size);
+  
+  const imageData = ctx.getImageData(0, 0, size + 1, size).data;
+  let hash = "";
+
+  // 2. dHash Algorithm: Compare adjacent pixels
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const left = imageData[((y * (size + 1)) + x) * 4];
+      const right = imageData[((y * (size + 1)) + (x + 1)) * 4];
+      hash += left < right ? '1' : '0';
+    }
+  }
+  return hash;
+}
+
+export function getHammingDistance(h1, h2) {
+  let distance = 0;
+  for (let i = 0; i < h1.length; i++) {
+    if (h1[i] !== h2[i]) distance++;
+  }
+  return distance;
+}
+
+

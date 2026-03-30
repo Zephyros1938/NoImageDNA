@@ -3,21 +3,26 @@ import {
     transform,
     genPasses,
     removeAlpha,
-    getPasswordVariation32
+    getPasswordVariation32,
+    getVisualFingerprint,
+    getHammingDistance
 } from './NoImageDNA.js';
 
 const imagePreInput = document.getElementById("imagePre");
 const statusDiv = document.getElementById("compareStatus");
 const passwordsRefreshButton = document.getElementById("refreshPasses");
+const passwordsDisplayList = document.getElementById("passes");
+const pHashSizeInput = document.getElementById("pHashSize");
 
 const MESSAGES = {
     "success": "SHA-256 Hashes match, no data has been lost",
-    "fail": "SHA-256 Hashes do not match, data may be degraded/corrupted"
+    "fail": "SHA-256 Hashes do not match, data may be degraded/corrupted",
+    "closenessWarn": "SHA-256 Hashes match, but distance of pHashes under 30"
 }
 
 var passes = [];
+var pHashSize = 16;
 
-256
 async function sha256(uint8Array) {
     const hashBuffer = await crypto.subtle.digest('SHA-256', uint8Array.buffer);
     const hashArray = Array.from(new Uint8Array(hashBuffer));
@@ -54,7 +59,9 @@ async function processImages(e) {
     // 2. Extract pixels
     const originalPixels = getPixels(canvasOrig);
     const hash1 = await sha256(originalPixels);
+    const pHash1 = await getVisualFingerprint(canvasOrig, pHashSize);
     document.getElementById('hashOrig').textContent = `Hash: ${hash1}`;
+    document.getElementById('pHashOrig').textContent = `pHash: ${parseInt(pHash1, 2).toString(16)}`;
 
     const encryptedPixels = transform(originalPixels, canvasOrig.width, canvasOrig.height, false, passes.length !== 0 ? passes : undefined);
 
@@ -67,7 +74,9 @@ async function processImages(e) {
     ctxEncFullAlpha.putImageData(new ImageData(removeAlpha(encryptedPixels), canvasEncFullAlpha.width, canvasEncFullAlpha.height),0 ,0);
 
     const hash2 = await sha256(encryptedPixels);
+    const pHash2 = await getVisualFingerprint(canvasEnc, pHashSize);
     document.getElementById('hashEnc').textContent = `Hash: ${hash2}`;
+    document.getElementById('pHashEnc').textContent = `pHash: ${parseInt(pHash2, 2).toString(16)}`;
 
     //  Decrypt 
     const decryptedPixels = transform(encryptedPixels, canvasOrig.width, canvasOrig.height, true, passes.length !== 0 ? passes : undefined);
@@ -81,9 +90,15 @@ async function processImages(e) {
 
     const statusDiv = document.getElementById("compareStatus");
     statusDiv.style.display = "block";
+    let hammingDistance = getHammingDistance(pHash1, pHash2);
+    document.getElementById("pHashHammingDistance").innerText = hammingDistance/(pHashSize*pHashSize);
     if (hash1 === hash3) {
+        if (hammingDistance < 30) {
+      statusDiv.textContent = MESSAGES.closenessWarn;
+      statusDiv.className = "status closenessWarn";
+    } else {
         statusDiv.textContent = MESSAGES.success;
-        statusDiv.className = "status match";
+        statusDiv.className = "status match";}
     } else {
         statusDiv.textContent = MESSAGES.fail;
         statusDiv.className = "status mismatch";
@@ -97,5 +112,40 @@ async function processImages(e) {
 imagePreInput.addEventListener('change', processImages);
 refreshPasses.onclick = function() {
     passes = genPasses(document.getElementById("numPasses").value);
+    while (passwordsDisplayList.firstChild)
+    {
+    passwordsDisplayList.removeChild(passwordsDisplayList.firstChild);
+  }
     console.log(passes)
+    document.getElementById("passesVariance").innerText = `Password Variance: ${getPasswordVariation32(passes)}`;
+
+    const elem = document.createElement("p");
+    elem.style.fontFamily = "monospace"
+    for (let i = 0; i < passes.length; i++) {
+
+    const pass = passes[i];
+
+
+    let passHex = pass.toString(16);
+    while (passHex.length < 8) {
+      passHex = "0" + passHex;
+    }
+    elem.innerText += passHex;
+    elem.innerText += " ";
+
+
+    
+  }
+
+    passwordsDisplayList.appendChild(elem);
 }
+pHashSizeInput.addEventListener("input", function() {
+  if (pHashSizeInput.value == undefined || pHashSizeInput.value == "") {
+    return;
+  }
+  if (pHashSizeInput.value < 1) {
+    return;
+  }
+  console.log(pHashSizeInput.value)
+  pHashSize = pHashSizeInput.value
+})
