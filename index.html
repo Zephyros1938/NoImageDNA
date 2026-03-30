@@ -8,7 +8,7 @@
 
 <body>
   <h1>NoImageDNA Web</h1>
-  <p><i>An API designed to avoid ai-image and algorithmic image matching.</i></p>
+  <p><i>An API designed to help avoid ai-image and algorithmic image matching.</i></p>
   <hr>
 
   <input type="file" id="imagePre" accept=".png, .jpg, .jpeg, .bmp">
@@ -16,22 +16,26 @@
 
   <div class="canvas-container">
     <div class="frame">
-      <h3>1. Original Upload</h3>
+      <h3>Original Image</h3>
       <canvas id="canvasOrig"></canvas>
       <div class="hash-box" id="hashOrig">Hash: Pending...</div>
     </div>
 
     <div class="frame">
-      <h3>2. Encrypted Output</h3>
+      <h3>Encrypted</h3>
       <canvas id="canvasEnc"></canvas>
       <div class="hash-box" id="hashEnc">Hash: Pending...</div>
     </div>
-
+    <div class="frame">
+      <h3>Encrypted (Full Alpha)</h3>
+      <canvas id="canvasEncFullAlpha"></canvas>
+      <div class="warn-box"> This image will not decrypt - It is viewing only </div>
+    </div>
 
   </div>
   <div class="canvas-container">
     <div class="frame">
-      <h3>3. Decrypted (Re-Encrypted)</h3>
+      <h3>Decrypted (Re-Encrypted)</h3>
       <canvas id="canvasDec"></canvas>
       <div class="hash-box" id="hashDec">Hash: Pending...</div>
     </div>
@@ -45,87 +49,7 @@
     </div>
   </div>
 
-  <script type="module">
-    import {getPixels, transform, genPasses} from './imageUtil.js';
-
-    const imagePreInput = document.getElementById("imagePre");
-    const statusDiv = document.getElementById("compareStatus");
-    const passwordsRefreshButton = document.getElementById("refreshPasses");
-
-    const MESSAGES = {
-      "success": "SHA-256 Hashes match, no data has been lost",
-      "fail": "SHA-256 Hashes do not match, data may be degraded/corrupted"
-    }
-
-    var passes = [];
-
-
-    async function sha256(uint8Array) {
-      const hashBuffer = await crypto.subtle.digest('SHA-256', uint8Array.buffer);
-      const hashArray = Array.from(new Uint8Array(hashBuffer));
-      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-    }
-
-    async function processImages(e) {
-      const file = e.target.files[0];
-      if (!file) return;
-
-      const canvasOrig = document.getElementById('canvasOrig');
-      const canvasEnc = document.getElementById('canvasEnc');
-      const canvasDec = document.getElementById('canvasDec');
-
-      const ctxOrig = canvasOrig.getContext('2d');
-      const ctxEnc = canvasEnc.getContext('2d');
-      const ctxDec = canvasDec.getContext('2d');
-
-      // Load the Image File onto the first Canvas
-      const img = new Image();
-      img.src = URL.createObjectURL(file);
-
-      await new Promise((resolve) => {
-        img.onload = () => {
-          canvasOrig.width = img.width;
-          canvasOrig.height = img.height;
-          ctxOrig.drawImage(img, 0, 0);
-          resolve();
-        };
-      });
-
-      // 2. Extract pixels
-      const originalPixels = getPixels(canvasOrig);
-      const hash1 = await sha256(originalPixels);
-      document.getElementById('hashOrig').textContent = `Hash: ${hash1}`;
-
-      const encryptedPixels = transform(originalPixels, canvasOrig.width, canvasOrig.height, false, passes.length !== 0 ? passes : undefined);
-
-      canvasEnc.width = canvasOrig.width;
-      canvasEnc.height = canvasOrig.height;
-      ctxEnc.putImageData(new ImageData(encryptedPixels, canvasEnc.width, canvasEnc.height), 0, 0);
-
-      const hash2 = await sha256(encryptedPixels);
-      document.getElementById('hashEnc').textContent = `Hash: ${hash2}`;
-
-      //  Decrypt 
-      const decryptedPixels = transform(encryptedPixels, canvasOrig.width, canvasOrig.height, true, passes.length !== 0 ? passes : undefined);
-
-      canvasDec.width = canvasOrig.width;
-      canvasDec.height = canvasOrig.height;
-      ctxDec.putImageData(new ImageData(decryptedPixels, canvasDec.width, canvasDec.height), 0, 0);
-
-      const hash3 = await sha256(decryptedPixels);
-      document.getElementById('hashDec').textContent = `Hash: ${hash3}`;
-
-      const statusDiv = document.getElementById("compareStatus");
-      statusDiv.style.display = "block";
-      if (hash1 === hash3) {
-        statusDiv.textContent = MESSAGES.success;
-        statusDiv.className = "status match";
-      } else {
-        statusDiv.textContent = MESSAGES.fail;
-        statusDiv.className = "status mismatch";
-      }
-    } imagePreInput.addEventListener('change', processImages);
-    refreshPasses.onclick = function () {passes = genPasses(document.getElementById("numPasses").value); console.log(passes)}
+  <script type="module" src="index.js">
   </script>
 </body>
 

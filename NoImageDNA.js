@@ -29,6 +29,14 @@ export function transform(pixels, width, height, decrypt = false, passwords = BA
   return out;
 }
 
+export function removeAlpha(pixels) {
+  const data = new Uint8ClampedArray(pixels);
+  for (let i = 0; i < data.length; i+=4) {
+    data[i+3] = 255;
+  }
+  return data;
+}
+
 function applyPassword(data, ps) {
   for (const p of ps) {
   for (let i = 0; i < data.length; i += 4) {
