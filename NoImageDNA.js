@@ -3,15 +3,18 @@ export function getPixels(canvas) {
     return ctx.getImageData(0, 0, canvas.width, canvas.height).data;
 }
 
-const BASIC_SET_PASSWORDS = genPasses(64);
+const BASIC_SET_PASSWORDS = genPasses(1024);
 const XOR_BEST_MID = 0x7A3C19E2
 const PRIMES = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97, 101, 103, 107, 109, 113, 127, 131, 137, 139, 149, 151, 157, 163, 167, 173, 179, 181, 191, 193, 197, 199, 211, 223, 227, 229, 233, 239, 241, 251, 257, 263, 269, 271, 277, 281];
+const P1 = Array.from({ length: 64 }, (_, i) => (i * (i + 1)) / 2);
 
 export const FLAGS = {
     "PASSWORD": 1 << 0,
     "SWAPBIGROW": 1 << 1,
     "SWAPBIGCOL": 1 << 2,
-    "INTERACTIONS1": 1 << 3
+    "INTERACTIONS1": 1 << 3,
+    "SWAPBIGROW_P1": 1 << 4,
+    "SWAPBIGCOL_P1": 1 << 5
 };
 
 export const FLAGS_ALL = Object.values(FLAGS).reduce((acc, flag) => acc | flag, 0);
@@ -21,22 +24,14 @@ export function transform(pixels, width, height, decrypt = false, passwords = BA
     if (passwords == BASIC_SET_PASSWORDS) {
         console.warn("Using default passwords, this may be insecure.")
     }
+
     const out = new Uint32Array(pixels.buffer);
-    const p = passwords.map(password => [
-        (password >>> 0) & 0xff,
-        (password >>> 8) & 0xff,
-        (password >>> 16) & 0xff,
-        (password >>> 24) & 0xff
-    ]);
-
     const masterKey = passwords.reduce((acc, p) => acc ^ p, 0) >>> 0;
-
-    console.log(width, width / 2, height, height / 2);
 
     const operations = [{
         flag: FLAGS.PASSWORD,
         do: () => applyPassword(out, masterKey),
-        reverse: () => applyPassword(out, masterKey)
+        reverse: () => deplyPassword(out, masterKey)
     }, {
         flag: FLAGS.SWAPBIGCOL,
         do: () => recursiveSwapBigCols(out, width, height, PRIMES.reverse()),
@@ -49,6 +44,14 @@ export function transform(pixels, width, height, decrypt = false, passwords = BA
         flag: FLAGS.INTERACTIONS1,
         do: () => applyInteractions(out),
         reverse: () => reverseInteractions(out)
+    }, {
+        flag: FLAGS.SWAPBIGCOL_P1,
+        do: () => recursiveSwapBigCols(out, width, height, P1.reverse()),
+        reverse: () => recursiveSwapBigCols(out, width, height, P1)
+    }, {
+        flag: FLAGS.SWAPBIGROW_P1,
+        do: () => recursiveSwapBigRows(out, width, height, P1.reverse()),
+        reverse: () => recursiveSwapBigRows(out, width, height, P1)
     }];
 
     const activeOps = decrypt ? operations : [...operations].reverse();
@@ -158,8 +161,20 @@ export function removeAlpha(pixels) {
 
 function applyPassword(data, mkey) {
     for (let i = 0; i < data.length; i++) {
+
+        data[i] ^= ~mkey % (i ^ (mkey << (i % 5)) & 0xff)
         data[i] ^= mkey;
+
+        //mkey ^= data[i];
     }
+}
+
+function deplyPassword(data, mkey) {
+  for (let i = 0; i < data.length; i++) {
+    data[i] ^= ~mkey % (i ^ (mkey << (i % 5)) & 0xff)
+    data[i] ^= mkey;
+    //mkey ^= data[i] ^ mkey;
+  }
 }
 
 function applyInteractions(data32) {
