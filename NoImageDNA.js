@@ -8,6 +8,15 @@ const XOR_BEST_MID = 0x7A3C19E2
 const PRIMES = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97, 101, 103, 107, 109, 113, 127, 131, 137, 139, 149, 151, 157, 163, 167, 173, 179, 181, 191, 193, 197, 199, 211, 223, 227, 229, 233, 239, 241, 251, 257, 263, 269, 271, 277, 281];
 const P1 = Array.from({ length: 64 }, (_, i) => (i * (i + 1)) / 2);
 
+const DIVY = Array.from({ length: 256 }, (_, i) => {
+    let res = 0n; // Using BigInt for safety during bitwise construction
+    for (let bit = 0; bit < 8; bit++) {
+        if ((i >> bit) & 1) {
+            res |= (0xFn << BigInt(bit * 4));
+        }
+    }
+    return Number(res) >>> 0;
+});
 export const FLAGS = {
     "PASSWORD": 1 << 0,
     "SWAPBIGROW": 1 << 1,
@@ -30,8 +39,8 @@ export function transform(pixels, width, height, decrypt = false, passwords = BA
 
     const operations = [{
         flag: FLAGS.PASSWORD,
-        do: () => applyPassword(out, masterKey),
-        reverse: () => deplyPassword(out, masterKey)
+        do: () => applyPassword(out, masterKey, passwords),
+        reverse: () => deplyPassword(out, masterKey, passwords)
     }, {
         flag: FLAGS.SWAPBIGCOL,
         do: () => recursiveSwapBigCols(out, width, height, PRIMES.reverse()),
@@ -65,79 +74,60 @@ export function transform(pixels, width, height, decrypt = false, passwords = BA
     return new Uint8ClampedArray(out.buffer);
 }
 
-
-function swapHalves(data, width, height) {
-    const halfWidth = Math.floor(width / 2);
-    const rightStart = width % 2 === 0 ? halfWidth : halfWidth + 1;
-
-    const tempBuffer = new Uint32Array(halfWidth);
-
-    for (let r = 0; r < height; r++) {
-        const rowOffset = r * width;
-        const leftIdx = rowOffset;
-        const rightIdx = rowOffset + rightStart;
-
-        tempBuffer.set(data.subarray(leftIdx, leftIdx + halfWidth));
-        data.copyWithin(leftIdx, rightIdx, rightIdx + halfWidth);
-        data.set(tempBuffer, rightIdx);
-    }
-}
-
 function recursiveSwapCols(data, width, height, stride = 13) {
-    function processSegment(colStart, colWidth) {
-        if (colWidth <= stride) return;
+    let colWidth = width;
+    
+    // Instead of recursion, we can simulate the "halving" logic
+    // Or, if you specifically need the recursive behavior:
+    function process(colStart, currentWidth) {
+        if (currentWidth <= stride) return;
 
-        const halfWidth = Math.floor(colWidth / 2);
-        const rightOffset = colWidth % 2 === 0 ? halfWidth : halfWidth + 1;
+        const half = Math.floor(currentWidth / 2);
+        const rightOffset = currentWidth % 2 === 0 ? half : half + 1;
 
+        // OPTIMIZATION: Row loop outside, Column loop inside
         for (let r = 0; r < height; r++) {
-            const rowOffset = r * width;
-            for (let c = 0; c < halfWidth; c++) {
-                const idxA = rowOffset + colStart + c;
-                const idxB = rowOffset + colStart + rightOffset + c;
-
+            const rowOffset = r * width + colStart;
+            for (let c = 0; c < half; c++) {
+                const idxA = rowOffset + c;
+                const idxB = rowOffset + rightOffset + c;
+                
                 const temp = data[idxA];
                 data[idxA] = data[idxB];
                 data[idxB] = temp;
             }
         }
 
-        processSegment(colStart, halfWidth); // Left half
-        processSegment(colStart + rightOffset, halfWidth); // Right half
+        process(colStart, half);
+        process(colStart + rightOffset, half);
     }
-
-    processSegment(0, width);
+    process(0, width);
 }
 
 function recursiveSwapRows(data, width, height, stride = 13) {
-    function processSegment(rowStart, rowHeight) {
-        // Base case: if the current segment height is small enough, stop
-        if (rowHeight <= stride) return;
+    function process(rowStart, currentHeight) {
+        if (currentHeight <= stride) return;
 
-        const halfHeight = Math.floor(rowHeight / 2);
-        // Calculate the start of the bottom half to handle odd heights correctly
-        const bottomOffset = rowHeight % 2 === 0 ? halfHeight : halfHeight + 1;
+        const half = Math.floor(currentHeight / 2);
+        const bottomOffset = currentHeight % 2 === 0 ? half : half + 1;
 
-        // Iterate through each column
-        for (let c = 0; c < width; c++) {
-            // For each column, swap pixels between the top half and bottom half segments
-            for (let r = 0; r < halfHeight; r++) {
-                const idxA = (rowStart + r) * width + c;
-                const idxB = (rowStart + bottomOffset + r) * width + c;
-
-                const temp = data[idxA];
-                data[idxA] = data[idxB];
-                data[idxB] = temp;
-            }
+        // OPTIMIZATION: Swap whole rows at once using typed array methods
+        for (let r = 0; r < half; r++) {
+            const startA = (rowStart + r) * width;
+            const startB = (rowStart + bottomOffset + r) * width;
+            
+            // Grab a temporary copy of one row segment
+            const temp = data.slice(startA, startA + width);
+            // Move row B to row A
+            data.set(data.subarray(startB, startB + width), startA);
+            // Move temp (old row A) to row B
+            data.set(temp, startB);
         }
 
-        // Recursively process the top and bottom halves
-        processSegment(rowStart, halfHeight);
-        processSegment(rowStart + bottomOffset, halfHeight);
+        process(rowStart, half);
+        process(rowStart + bottomOffset, half);
     }
-
-    processSegment(0, height);
-}
+    process(0, height);}
 
 function recursiveSwapBigCols(data, width, height, strides) {
     strides.forEach((stride) => {
@@ -159,21 +149,21 @@ export function removeAlpha(pixels) {
     return data;
 }
 
-function applyPassword(data, mkey) {
-    for (let i = 0; i < data.length; i++) {
-
-        data[i] ^= ~mkey % (i ^ (mkey << (i % 5)) & 0xff)
-        data[i] ^= mkey;
-
-        //mkey ^= data[i];
-    }
+function applyPassword(data, mkey, keys = []) {
+  for (let i = 0; i < data.length; i++) {
+    data[i] ^= mkey;
+    data[i] ^= keys[i % keys.length] | i;
+    data[i] ^= keys[keys[i % keys.length] % keys.length];
+  }
 }
 
-function deplyPassword(data, mkey) {
+function deplyPassword(data, mkey, keys = []) {
   for (let i = 0; i < data.length; i++) {
-    data[i] ^= ~mkey % (i ^ (mkey << (i % 5)) & 0xff)
+    let mkey2 = mkey;
     data[i] ^= mkey;
-    //mkey ^= data[i] ^ mkey;
+    data[i] ^= keys[i % keys.length] | i;
+        data[i] ^= keys[keys[i % keys.length] % keys.length];
+
   }
 }
 
@@ -191,6 +181,13 @@ function applyInteractions(data32) {
 
         data32[i] = (r | (g << 8) | (b << 16) | (a << 24));
     }
+}
+
+function swapEndianness32(n) {
+  return ((n & 0xFF) << 24) | 
+    ((n & 0xFF00) << 8) | 
+    ((n >> 8) & 0xFF00) | 
+    ((n >> 24) & 0xFF);
 }
 
 function swapColumnBlocks(data, width, height, startA, startB, blockWidth) {
@@ -257,7 +254,7 @@ export function getPasswordVariation32(p = BASIC_SET_PASSWORDS) {
 /* 
  * ImageDNA utils
  */
-export async function getVisualFingerprint(canvas, size = 8) {
+export async function getVisualFingerprint(canvas, size = 8, displayContainerId = undefined) {
     const tempCanvas = document.createElement('canvas');
     tempCanvas.width = size + 1; // Extra pixel for horizontal difference
     tempCanvas.height = size;
@@ -266,6 +263,19 @@ export async function getVisualFingerprint(canvas, size = 8) {
     // 1. Grayscale and Resize (Standard Perceptual Pre-processing)
     ctx.filter = 'grayscale(100%)';
     ctx.drawImage(canvas, 0, 0, size + 1, size);
+
+    
+
+    const displayContainer = document.getElementById(displayContainerId);
+    if (displayContainer) {
+        displayContainer.innerHTML = ''; 
+        
+        //tempCanvas.style.width = `${(tempCanvas.width-1) * 10}`; 
+        //tempCanvas.style.height = `${tempCanvas.height * 10}`;
+        tempCanvas.style.imageRendering = 'pixelated'; // Keeps it sharp
+        
+        displayContainer.appendChild(tempCanvas);
+    }
 
     const imageData = ctx.getImageData(0, 0, size + 1, size).data;
     let hash = "";

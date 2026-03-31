@@ -74,7 +74,7 @@ async function processImages(e) {
     // 2. Extract pixels
     const originalPixels = getPixels(canvasOrig);
     const hash1 = await sha256(originalPixels);
-    const pHash1 = await getVisualFingerprint(canvasOrig, pHashSize);
+    const pHash1 = await getVisualFingerprint(canvasOrig, pHashSize, "preDisplayPHash");
     document.getElementById('hashOrig').textContent = `Hash: ${hash1}`;
     document.getElementById('pHashOrig').textContent = `pHash: ${parseInt(pHash1, 2).toString(16)}`;
 
@@ -89,7 +89,7 @@ async function processImages(e) {
     ctxEncFullAlpha.putImageData(new ImageData(removeAlpha(encryptedPixels), canvasEncFullAlpha.width, canvasEncFullAlpha.height), 0, 0);
 
     const hash2 = await sha256(encryptedPixels);
-    const pHash2 = await getVisualFingerprint(canvasEnc, pHashSize);
+    const pHash2 = await getVisualFingerprint(canvasEnc, pHashSize, "encDisplayPHash");
     document.getElementById('hashEnc').textContent = `Hash: ${hash2}`;
     document.getElementById('pHashEnc').textContent = `pHash: ${parseInt(pHash2, 2).toString(16)}`;
 
