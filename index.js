@@ -5,7 +5,8 @@ import {
     removeAlpha,
     getPasswordVariation32,
     getVisualFingerprint,
-    getHammingDistance
+    getHammingDistance,
+    FLAGS, FLAGS_ALL
 } from './NoImageDNA.js';
 
 const imagePreInput = document.getElementById("imagePre");
@@ -13,6 +14,7 @@ const statusDiv = document.getElementById("compareStatus");
 const passwordsRefreshButton = document.getElementById("refreshPasses");
 const passwordsDisplayList = document.getElementById("passes");
 const pHashSizeInput = document.getElementById("pHashSize");
+const settingsContainer = document.getElementById('settingsContainer');
 
 const MESSAGES = {
     "success": "SHA-256 Hashes match, no data has been lost",
@@ -21,7 +23,20 @@ const MESSAGES = {
 }
 
 var passes = [];
-var pHashSize = 16;
+var pHashSize = 8; // This is standard for perceptual hashing
+var settings = FLAGS_ALL;
+
+Object.entries(FLAGS).forEach(([name, value]) => {
+  const label = document.createElement('label');
+  label.style.display = 'block';
+  
+  label.innerHTML = `
+    <input type="checkbox" value="${value}" data-name="${name}">
+    ${name} (Bit: ${value})
+  `;
+  
+  settingsContainer.appendChild(label);
+});
 
 async function sha256(uint8Array) {
     const hashBuffer = await crypto.subtle.digest('SHA-256', uint8Array.buffer);
@@ -63,15 +78,15 @@ async function processImages(e) {
     document.getElementById('hashOrig').textContent = `Hash: ${hash1}`;
     document.getElementById('pHashOrig').textContent = `pHash: ${parseInt(pHash1, 2).toString(16)}`;
 
-    const encryptedPixels = transform(originalPixels, canvasOrig.width, canvasOrig.height, false, passes.length !== 0 ? passes : undefined);
+    const encryptedPixels = transform(originalPixels, canvasOrig.width, canvasOrig.height, false, passes.length !== 0 ? passes : undefined,settings);
 
     canvasEnc.width = canvasOrig.width;
     canvasEnc.height = canvasOrig.height;
     ctxEnc.putImageData(new ImageData(encryptedPixels, canvasEnc.width, canvasEnc.height), 0, 0);
-    
+
     canvasEncFullAlpha.width = canvasOrig.width;
     canvasEncFullAlpha.height = canvasOrig.height;
-    ctxEncFullAlpha.putImageData(new ImageData(removeAlpha(encryptedPixels), canvasEncFullAlpha.width, canvasEncFullAlpha.height),0 ,0);
+    ctxEncFullAlpha.putImageData(new ImageData(removeAlpha(encryptedPixels), canvasEncFullAlpha.width, canvasEncFullAlpha.height), 0, 0);
 
     const hash2 = await sha256(encryptedPixels);
     const pHash2 = await getVisualFingerprint(canvasEnc, pHashSize);
@@ -79,7 +94,7 @@ async function processImages(e) {
     document.getElementById('pHashEnc').textContent = `pHash: ${parseInt(pHash2, 2).toString(16)}`;
 
     //  Decrypt 
-    const decryptedPixels = transform(encryptedPixels, canvasOrig.width, canvasOrig.height, true, passes.length !== 0 ? passes : undefined);
+    const decryptedPixels = transform(encryptedPixels, canvasOrig.width, canvasOrig.height, true, passes.length !== 0 ? passes : undefined,settings);
 
     canvasDec.width = canvasOrig.width;
     canvasDec.height = canvasOrig.height;
@@ -91,14 +106,15 @@ async function processImages(e) {
     const statusDiv = document.getElementById("compareStatus");
     statusDiv.style.display = "block";
     let hammingDistance = getHammingDistance(pHash1, pHash2);
-    document.getElementById("pHashHammingDistance").innerText = hammingDistance/(pHashSize*pHashSize);
+    document.getElementById("pHashHammingDistance").innerText = hammingDistance / (pHashSize * pHashSize);
     if (hash1 === hash3) {
         if (hammingDistance < 30) {
-      statusDiv.textContent = MESSAGES.closenessWarn;
-      statusDiv.className = "status closenessWarn";
-    } else {
-        statusDiv.textContent = MESSAGES.success;
-        statusDiv.className = "status match";}
+            statusDiv.textContent = MESSAGES.closenessWarn;
+            statusDiv.className = "status closenessWarn";
+        } else {
+            statusDiv.textContent = MESSAGES.success;
+            statusDiv.className = "status match";
+        }
     } else {
         statusDiv.textContent = MESSAGES.fail;
         statusDiv.className = "status mismatch";
@@ -106,16 +122,16 @@ async function processImages(e) {
 }
 
 /*
-  * Event Listeners
-  * */
+ * Event Listeners
+ * */
 
 imagePreInput.addEventListener('change', processImages);
 refreshPasses.onclick = function() {
     const numPasses = document.getElementById("numPasses").value;
     passes = genPasses(numPasses);
-    
+
     passwordsDisplayList.innerHTML = "";
-    
+
     console.log(passes);
     document.getElementById("passesVariance").innerText = `Password Variance: ${getPasswordVariation32(passes)}`;
 
@@ -126,16 +142,40 @@ refreshPasses.onclick = function() {
 
     const elem = document.createElement("p");
     elem.style.fontFamily = "monospace";
-    elem.textContent = outputText;     
+    elem.textContent = outputText;
     passwordsDisplayList.appendChild(elem);
 }
 pHashSizeInput.addEventListener("input", function() {
-  if (pHashSizeInput.value == undefined || pHashSizeInput.value == "") {
-    return;
-  }
-  if (pHashSizeInput.value < 1) {
-    return;
-  }
-  console.log(pHashSizeInput.value)
-  pHashSize = pHashSizeInput.value
+    if (pHashSizeInput.value == undefined || pHashSizeInput.value == "") {
+        return;
+    }
+    if (pHashSizeInput.value < 1) {
+        return;
+    }
+    console.log(pHashSizeInput.value)
+    pHashSize = pHashSizeInput.value
 })
+settingsContainer.addEventListener('change', () => {
+  let mask = 0;
+  const activeNames = [];
+
+  // Get all checked boxes
+  const checked = settingsContainer.querySelectorAll('input:checked');
+  
+  checked.forEach(input => {
+    const val = parseInt(input.value);
+    mask |= val; // Apply bitwise OR
+  });
+
+  // Verification: Use the dictionary to "decode" the mask
+  Object.entries(FLAGS).forEach(([name, value]) => {
+    if ((mask & value) === value) {
+      activeNames.push(name);
+    }
+  });
+
+  settings = mask;
+
+  document.getElementById('settingsEnabled').textContent = mask;
+  //document.getElementById('active-flags').textContent = activeNames.join(', ') || 'None';
+});

@@ -50,21 +50,25 @@
       <p>Passwords often are best-fit when their variance is around 3-7</p>
       <span id="passesVariance"></span>
       <div class="canvas-container">
-      
-      <div class="frame">
-      <h4>Passwords</h4>
-      <span id="passes"></span>
-          </div></div>
+        <div class="frame">
+          <h4>Passwords</h4>
+          <span id="passes"></span>
+        </div>
+      </div>
     </div>
 
-      <div class="frame">
-        <h3>Information</h3>
-        <p>Hamming Distance: <span id="pHashHammingDistance"></span></p>
-      
-        <h3>Configuration</h3>
-        <form><label for="pHashSize">Perceptual Hash Size (should be power of 2) </label><input type="number" id="pHashSize" name="pHashSize" min="1" max="256"></form>
+    <div class="frame">
+      <h3>Information</h3>
+      <p>Hamming Distance: <span id="pHashHammingDistance"></span></p>
 
-      </div>
+      <h3>Configuration</h3>
+      <form><label for="pHashSize">Perceptual Hash Size (should be power of 2) </label><input type="number"
+          id="pHashSize" name="pHashSize" min="1" max="256"></form>
+      <h4>Encryption Settings</h4>
+      <p>Total Value: <span id="settingsEnabled"></span></p>
+      <div id="settingsContainer"></div>
+
+    </div>
 
   </div>
 

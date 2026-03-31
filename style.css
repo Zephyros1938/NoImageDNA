@@ -51,6 +51,7 @@ canvas {
   border: 1px solid #f8b4b4;
   border-left: 4px solid #c81e1e;
 }
+
 .status {
   margin-top: 10px;
   font-weight: bold;
@@ -72,7 +73,9 @@ canvas {
 }
 
 .closenessWarn {
-  background: #fff3cd; /* Soft warning yellow */
-  color: #856404;      /* Deep brownish-gold for readability */
+  background: #fff3cd;
+  /* Soft warning yellow */
+  color: #856404;
+  /* Deep brownish-gold for readability */
   display: block;
 }
