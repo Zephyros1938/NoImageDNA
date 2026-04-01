@@ -23,7 +23,8 @@ export const FLAGS = {
     "SWAPBIGCOL": 1 << 2,
     "INTERACTIONS1": 1 << 3,
     "SWAPBIGROW_P1": 1 << 4,
-    "SWAPBIGCOL_P1": 1 << 5
+    "SWAPBIGCOL_P1": 1 << 5,
+    "BLOCKSWITCH": 1 << 9
 };
 
 export const FLAGS_ALL = Object.values(FLAGS).reduce((acc, flag) => acc | flag, 0);
@@ -228,6 +229,27 @@ function swap32(val) {
         (val >> 24) & 0xFF) >>> 0;
 }
 
+function applyBlockSwitch(data, width, height, mkey, passes) {
+
+};
+
+const ArrayUtils = {
+  getColumn: (data, width, height, columnIdx)=> {
+    if (columnIdx >= width){
+      throw `columnIdx must not be larger than width! (columnIdx was ${columnIdx}, width was ${width})`;}
+    return Array.from({length: height}, (_, i) => data[i * width + columnIdx]);
+  };
+  getRow: (data, width, height, rowIdx) => {
+    if (rowIdx >= height) {
+      throw `rowIdx must not be larger than height! (rowIdx was ${rowIdx}, height was ${height}`;}
+    return data.slice(rowIdx * width, rowIdx * width + width);
+  }
+};
+
+/*
+ * Password Utils
+ */
+
 export function genPasses(count = 32) {
     const array = new Uint32Array(count);
     self.crypto.getRandomValues(array);
@@ -254,6 +276,7 @@ export function getPasswordVariation32(p = BASIC_SET_PASSWORDS) {
 /* 
  * ImageDNA utils
  */
+
 export async function getVisualFingerprint(canvas, size = 8, displayContainerId = undefined) {
     const tempCanvas = document.createElement('canvas');
     tempCanvas.width = size + 1; // Extra pixel for horizontal difference
@@ -268,14 +291,16 @@ export async function getVisualFingerprint(canvas, size = 8, displayContainerId 
 
     const displayContainer = document.getElementById(displayContainerId);
     if (displayContainer) {
-        displayContainer.innerHTML = ''; 
-        
-        //tempCanvas.style.width = `${(tempCanvas.width-1) * 10}`; 
-        //tempCanvas.style.height = `${tempCanvas.height * 10}`;
-        tempCanvas.style.imageRendering = 'pixelated'; // Keeps it sharp
-        
-        displayContainer.appendChild(tempCanvas);
-    }
+    displayContainer.innerHTML = ''; 
+    
+    const scaleFactor = 20;
+    tempCanvas.style.width = `${(tempCanvas.width) * scaleFactor}px`; 
+    tempCanvas.style.height = `${tempCanvas.height * scaleFactor}px`;
+    
+    tempCanvas.style.imageRendering = 'pixelated'; 
+    
+    displayContainer.appendChild(tempCanvas);
+}
 
     const imageData = ctx.getImageData(0, 0, size + 1, size).data;
     let hash = "";
