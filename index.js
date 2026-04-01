@@ -15,6 +15,7 @@ const passwordsRefreshButton = document.getElementById("refreshPasses");
 const passwordsDisplayList = document.getElementById("passes");
 const pHashSizeInput = document.getElementById("pHashSize");
 const settingsContainer = document.getElementById('settingsContainer');
+const recursiveContainer = document.getElementById('Recursive');
 
 const MESSAGES = {
     "success": "SHA-256 Hashes match, no data has been lost",
@@ -78,7 +79,7 @@ async function processImages(e) {
     document.getElementById('hashOrig').textContent = `Hash: ${hash1}`;
     document.getElementById('pHashOrig').textContent = `pHash: ${parseInt(pHash1, 2).toString(16)}`;
 
-    const encryptedPixels = transform(originalPixels, canvasOrig.width, canvasOrig.height, false, passes.length !== 0 ? passes : undefined,settings);
+    const encryptedPixels = transform(originalPixels, canvasOrig.width, canvasOrig.height, false, passes.length !== 0 ? passes : undefined,settings, recursiveContainer.checked);
 
     canvasEnc.width = canvasOrig.width;
     canvasEnc.height = canvasOrig.height;
@@ -94,7 +95,7 @@ async function processImages(e) {
     document.getElementById('pHashEnc').textContent = `pHash: ${parseInt(pHash2, 2).toString(16)}`;
 
     //  Decrypt 
-    const decryptedPixels = transform(encryptedPixels, canvasOrig.width, canvasOrig.height, true, passes.length !== 0 ? passes : undefined,settings);
+    const decryptedPixels = transform(encryptedPixels, canvasOrig.width, canvasOrig.height, true, passes.length !== 0 ? passes : undefined, settings, recursiveContainer.checked);
 
     canvasDec.width = canvasOrig.width;
     canvasDec.height = canvasOrig.height;

@@ -3,6 +3,12 @@ export function getPixels(canvas) {
     return ctx.getImageData(0, 0, canvas.width, canvas.height).data;
 }
 
+function reverseSubarray(array,start,end) {
+    while (start < end) {
+        [array[start],array[end]] = [array[end],array[start]];
+        start++; end--;
+    }
+}
 const BASIC_SET_PASSWORDS = genPasses(1024);
 const XOR_BEST_MID = 0x7A3C19E2
 const PRIMES = [2];
@@ -50,7 +56,7 @@ export const FLAGS = {
 export const FLAGS_ALL = Object.values(FLAGS).reduce((acc, flag) => acc | flag, 0);
 console.log(FLAGS_ALL);
 
-export function transform(pixels, width, height, decrypt = false, passwords = BASIC_SET_PASSWORDS, flags = FLAGS_ALL) {
+export function transform(pixels, width, height, decrypt = false, passwords = BASIC_SET_PASSWORDS, flags = FLAGS_ALL, recursive) {
     if (passwords == BASIC_SET_PASSWORDS) {
         console.warn("Using default passwords, this may be insecure.")
     }
@@ -88,8 +94,8 @@ export function transform(pixels, width, height, decrypt = false, passwords = BA
         reverse: () => recursiveSwapBigRows(out, width, height, P1)
     }, {
         flag: FLAGS.NOTGATE,
-        do: () => notGate(out, masterKey),
-        reverse: () => notnotGate(out, masterKey)
+        do: () => notGate(out, recursive ? passwords : [masterKey]),
+        reverse: () => notnotGate(out, recursive ? passwords : [masterKey])
     }, {
         flag: FLAGS.FLIPPER,
         do: () => pixelFlipper(out, masterKey, 7),
@@ -200,32 +206,36 @@ function applyPassword(data, mkey, keys = []) {
 
 function deplyPassword(data, mkey, keys = []) {
   for (let i = 0; i < data.length; i++) {
-    let mkey2 = mkey;
     data[i] ^= mkey;
     data[i] ^= keys[i % keys.length] | i;
-        data[i] ^= keys[keys[i % keys.length] % keys.length];
+    data[i] ^= keys[keys[i % keys.length] % keys.length];
 
   }
 }
 
-function notGate(data, mkey) {
-  for (let i = 0; i < data.length; i++) {
-    data[i] = (((mkey >>> (32 - (i%32))) & 1) == 1) ? ~data[i] : data[i]; // NOT item if position mod bit is 1
-    if ((i%32) == 31) {
-        mkey = data[i] // If data at end, replace key
+function notGate(data, passwords) {
+  for (let mkey of passwords) {
+    for (let i = 0; i < data.length; i++) {
+        data[i] = (((mkey >>> (32 - (i%32))) & 1) == 1) ? ~data[i] : data[i]; // NOT item if position mod bit is 1
+        if ((i%32) == 31) {
+            mkey = data[i] // If data at end, replace key
+        }
     }
   }
 }
 
-function notnotGate(data, mkey) {
-  for (let i = 0; i < data.length; i++) {
-    let mkey2 = 0
-    if ((i%32) == 31) {
-        mkey2 = data[i]
-    }
-    data[i] = (((mkey >>> (32 - (i%32))) & 1) == 1) ? ~data[i] : data[i]; // NOT item if position mod bit is 1
-    if ((i%32) == 31) {
-        mkey = mkey2 // If data at end, replace key with old data
+function notnotGate(data, passwords) {
+  for (let j = passwords.length-1; j >= 0; j--) {
+    let mkey = passwords[j];
+    for (let i = 0; i < data.length; i++) {
+        let mkey2 = 0
+        if ((i%32) == 31) {
+            mkey2 = data[i]
+        }
+        data[i] = (((mkey >>> (32 - (i%32))) & 1) == 1) ? ~data[i] : data[i]; // NOT item if position mod bit is 1
+        if ((i%32) == 31) {
+            mkey = mkey2 // If data at end, replace key with old data
+        }
     }
   }
 }
@@ -239,10 +249,11 @@ function pixelFlipper(data, mkey, b) {
     }
     for (let i = 0; i <= data.length-digits; i++) {
         let kbit = segments[i%segments.length]
-        let pA = data.slice(i, i+kbit)
-        let pB = data.slice(i+kbit, i+digits)
-        data.set(pB,i) // Swap pA and pB
-        data.set(pA,i+pB.length)
+        if (kbit != 0) {
+            reverseSubarray(data, i, i+kbit-1)
+            reverseSubarray(data, i+kbit, i+digits-1)
+            reverseSubarray(data, i, i+digits-1)
+        }
     }  
 }
 function pixelUnflipper(data, mkey, b) {
@@ -254,10 +265,11 @@ function pixelUnflipper(data, mkey, b) {
     }
     for (let i = data.length-digits; i >= 0; i--) {
         let kbit = segments[i%segments.length]
-        let pA = data.slice(i, i+(digits-kbit)) 
-        let pB = data.slice(i+(digits-kbit), i+digits)
-        data.set(pB,i) // Swap pA and pB
-        data.set(pA,i+pB.length)
+        if (kbit != 0) {
+            reverseSubarray(data, i, i+(digits-kbit)-1) 
+            reverseSubarray(data, i+(digits-kbit), i+digits-1)
+            reverseSubarray(data, i, i+digits-1)
+        }
     }  
 }
 function colorByPos(data, mkey) {
