@@ -94,8 +94,8 @@ export function transform(pixels, width, height, decrypt = false, passwords = BA
         reverse: () => recursiveSwapBigRows(out, width, height, P1)
     }, {
         flag: FLAGS.NOTGATE,
-        do: () => notGate(out, recursive ? passwords : [masterKey]),
-        reverse: () => notnotGate(out, recursive ? passwords : [masterKey])
+        do: () => notGate(out, passwords),
+        reverse: () => notGate(out, passwords)
     }, {
         flag: FLAGS.FLIPPER,
         do: () => pixelFlipper(out, recursive ? passwords : [masterKey], 7),
@@ -218,30 +218,13 @@ function deplyPassword(data, mkey, keys = []) {
 }
 
 function notGate(data, passwords) {
-  for (let mkey of passwords) {
+    let mkey = passwords[0]
     for (let i = 0; i < data.length; i++) {
         data[i] = (((mkey >>> (32 - (i%32))) & 1) == 1) ? ~data[i] : data[i]; // NOT item if position mod bit is 1
         if ((i%32) == 31) {
-            mkey = data[i] // If data at end, replace key
+            mkey = passwords[Math.floor((i%passwords.length)/32)] // If data at end, replace key
         }
     }
-  }
-}
-
-function notnotGate(data, passwords) {
-  for (let j = passwords.length-1; j >= 0; j--) {
-    let mkey = passwords[j];
-    for (let i = 0; i < data.length; i++) {
-        let mkey2 = 0
-        if ((i%32) == 31) {
-            mkey2 = data[i]
-        }
-        data[i] = (((mkey >>> (32 - (i%32))) & 1) == 1) ? ~data[i] : data[i]; // NOT item if position mod bit is 1
-        if ((i%32) == 31) {
-            mkey = mkey2 // If data at end, replace key with old data
-        }
-    }
-  }
 }
 
 function pixelFlipper(data, passwords, b) {
