@@ -25,6 +25,9 @@ export const FLAGS = {
     "SWAPBIGROW_P1": 1 << 4,
     "SWAPBIGCOL_P1": 1 << 5,
     "BLOCKSWITCH": 1 << 9
+    "NOTGATE": 1 << 6,
+    // "FLIPPER": 1 << 7, In beta, fix later ;)
+    "COLORPOSITION": 1 << 7
 };
 
 export const FLAGS_ALL = Object.values(FLAGS).reduce((acc, flag) => acc | flag, 0);
@@ -33,6 +36,10 @@ console.log(FLAGS_ALL);
 export function transform(pixels, width, height, decrypt = false, passwords = BASIC_SET_PASSWORDS, flags = FLAGS_ALL) {
     if (passwords == BASIC_SET_PASSWORDS) {
         console.warn("Using default passwords, this may be insecure.")
+    }
+
+    if (flags == 0) {
+        flags = FLAGS_ALL // All flags because disabling all flags disables all flags instead of enabling all
     }
 
     const out = new Uint32Array(pixels.buffer);
@@ -62,10 +69,22 @@ export function transform(pixels, width, height, decrypt = false, passwords = BA
         flag: FLAGS.SWAPBIGROW_P1,
         do: () => recursiveSwapBigRows(out, width, height, P1.reverse()),
         reverse: () => recursiveSwapBigRows(out, width, height, P1)
+    }, {
+        flag: FLAGS.NOTGATE,
+        do: () => notGate(out, masterKey),
+        reverse: () => notnotGate(out, masterKey)
+    }, {
+        flag: FLAGS.FLIPPER,
+        do: () => pixelFlipper(out, masterKey, 6),
+        reverse: () => pixelFlipper(out, masterKey, 6)
+    }, {
+        flag: FLAGS.COLORPOSITION,
+        do: () => colorByPos(out, masterKey, 6),
+        reverse: () => colorByPos(out, masterKey, 6)
     }];
 
     const activeOps = decrypt ? operations : [...operations].reverse();
-
+    
     activeOps.forEach(op => {
         if ((flags & op.flag) !== 0) {
             decrypt ? op.do() : op.reverse();
@@ -166,6 +185,57 @@ function deplyPassword(data, mkey, keys = []) {
         data[i] ^= keys[keys[i % keys.length] % keys.length];
 
   }
+}
+
+function notGate(data, mkey) {
+  for (let i = 0; i < data.length; i++) {
+    data[i] = (((mkey >> (32 - (i%32))) & 1) == 1) ? ~data[i] : data[i]; // NOT item if position mod bit is 1
+    if ((i%32) == 31) {
+        mkey = data[i] // If data at end, replace key
+    }
+  }
+}
+
+function notnotGate(data, mkey) {
+  for (let i = 0; i < data.length; i++) {
+    let mkey2 = 0
+    if ((i%32) == 31) {
+        mkey2 = data[i]
+    }
+    data[i] = (((mkey >> (32 - (i%32))) & 1) == 1) ? ~data[i] : data[i]; // NOT item if position mod bit is 1
+    if ((i%32) == 31) {
+        mkey = mkey2 // If data at end, replace key with old data
+    }
+  }
+}
+
+function pixelFlipper(data, mkey, b) {
+  for (let i = 0; i < data.length-(2^b); i++) {
+    let mask = (1 << b) - 1; 
+    let chunksPerKey = 32 / b;
+    let shift = (32 - b) - (i % chunksPerKey) * b;
+
+    let kbit = (mkey >>> shift) & mask;
+    console.log(data)
+    if (kbit > 0) { // Swaps data
+        let pA = data.slice(i, i+kbit)
+        let pB = data.slice(i+kbit, i+4)
+        data.set(pB, i)
+        data.set(pA, pB.length + i)
+    }
+  }  
+}
+
+function colorByPos(data, mkey) {
+  for (let i = 0; i < data.length; i++) {
+    let kbit = (mkey >>> (30 - (i % 16))) & 0b11;
+    let pixel = data[i];
+    let rgba = [pixel&0xFF, (pixel>>8)&0xFF, (pixel>>16)&0xFF, (pixel>>24)&0xFF];
+
+    rgba[kbit] = (rgba[kbit] ^ i) & 0xFF;
+
+    data[i] = (rgba[0] | (rgba[1] << 8) | (rgba[2] << 16) | (rgba[3] << 24))
+  }  
 }
 
 function applyInteractions(data32) {
