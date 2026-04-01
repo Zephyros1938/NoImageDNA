@@ -16,8 +16,8 @@ export const FLAGS = {
     "SWAPBIGROW_P1": 1 << 4,
     "SWAPBIGCOL_P1": 1 << 5,
     "NOTGATE": 1 << 6,
-    // "FLIPPER": 1 << 7, In beta, fix later ;)
-    "COLORPOSITION": 1 << 7
+    "FLIPPER": 1 << 7, // In beta, fix later ;)
+    "COLORPOSITION": 1 << 8
 
 };
 
@@ -66,12 +66,12 @@ export function transform(pixels, width, height, decrypt = false, passwords = BA
         reverse: () => notnotGate(out, masterKey)
     }, {
         flag: FLAGS.FLIPPER,
-        do: () => pixelFlipper(out, masterKey, 6),
-        reverse: () => pixelFlipper(out, masterKey, 6)
+        do: () => pixelFlipper(out, masterKey, 7),
+        reverse: () => pixelUnflipper(out, masterKey, 7)
     }, {
         flag: FLAGS.COLORPOSITION,
-        do: () => colorByPos(out, masterKey, 6),
-        reverse: () => colorByPos(out, masterKey, 6)
+        do: () => colorByPos(out, masterKey),
+        reverse: () => colorByPos(out, masterKey)
     }];
 
     const activeOps = decrypt ? operations : [...operations].reverse();
@@ -199,7 +199,7 @@ function deplyPassword(data, mkey) {
 
 function notGate(data, mkey) {
   for (let i = 0; i < data.length; i++) {
-    data[i] = (((mkey >> (32 - (i%32))) & 1) == 1) ? ~data[i] : data[i]; // NOT item if position mod bit is 1
+    data[i] = (((mkey >>> (32 - (i%32))) & 1) == 1) ? ~data[i] : data[i]; // NOT item if position mod bit is 1
     if ((i%32) == 31) {
         mkey = data[i] // If data at end, replace key
     }
@@ -212,7 +212,7 @@ function notnotGate(data, mkey) {
     if ((i%32) == 31) {
         mkey2 = data[i]
     }
-    data[i] = (((mkey >> (32 - (i%32))) & 1) == 1) ? ~data[i] : data[i]; // NOT item if position mod bit is 1
+    data[i] = (((mkey >>> (32 - (i%32))) & 1) == 1) ? ~data[i] : data[i]; // NOT item if position mod bit is 1
     if ((i%32) == 31) {
         mkey = mkey2 // If data at end, replace key with old data
     }
@@ -220,27 +220,40 @@ function notnotGate(data, mkey) {
 }
 
 function pixelFlipper(data, mkey, b) {
-  for (let i = 0; i < data.length-(2^b); i++) {
-    let mask = (1 << b) - 1; 
-    let chunksPerKey = 32 / b;
-    let shift = (32 - b) - (i % chunksPerKey) * b;
-
-    let kbit = (mkey >>> shift) & mask;
-    console.log(data)
-    if (kbit > 0) { // Swaps data
-        let pA = data.slice(i, i+kbit)
-        let pB = data.slice(i+kbit, i+4)
-        data.set(pB, i)
-        data.set(pA, pB.length + i)
+    let digits = 1 << b
+    let bitNo = 32;
+    let segments = [];
+    for (let i = 1; i <= bitNo / b; i++) {
+        segments.push((mkey >>> (bitNo-(i*b))) & (digits - 1)) 
     }
-  }  
+    for (let i = 0; i <= data.length-digits; i++) {
+        let kbit = segments[i%segments.length]
+        let pA = data.slice(i, i+kbit)
+        let pB = data.slice(i+kbit, i+digits)
+        data.set(pB,i)
+        data.set(pA,i+pB.length)
+    }  
 }
-
+function pixelUnflipper(data, mkey, b) {
+    let digits = 1 << b
+    let bitNo = 32
+    let segments = [];
+    for (let i = 1; i <= bitNo / b; i++) {
+        segments.push((mkey >>> (bitNo-(i*b))) & (digits - 1)) 
+    }
+    for (let i = data.length-digits; i >= 0; i--) {
+        let kbit = segments[i%segments.length]
+        let pA = data.slice(i, i+(digits-kbit))
+        let pB = data.slice(i+(digits-kbit), i+digits)
+        data.set(pB,i)
+        data.set(pA,i+pB.length)
+    }  
+}
 function colorByPos(data, mkey) {
   for (let i = 0; i < data.length; i++) {
     let kbit = (mkey >>> (30 - (i % 16))) & 0b11;
     let pixel = data[i];
-    let rgba = [pixel&0xFF, (pixel>>8)&0xFF, (pixel>>16)&0xFF, (pixel>>24)&0xFF];
+    let rgba = [pixel&0xFF, (pixel>>>8)&0xFF, (pixel>>>16)&0xFF, (pixel>>>24)&0xFF];
 
     rgba[kbit] = (rgba[kbit] ^ i) & 0xFF;
 
