@@ -29,6 +29,7 @@ var settings = FLAGS_ALL;
 Object.entries(FLAGS).forEach(([name, value]) => {
   const label = document.createElement('label');
   label.style.display = 'block';
+  //console.log(name, value);
   
   label.innerHTML = `
     <input type="checkbox" value="${value}" data-name="${name}">
@@ -130,9 +131,8 @@ refreshPasses.onclick = function() {
     const numPasses = document.getElementById("numPasses").value;
     passes = genPasses(numPasses);
 
-    passwordsDisplayList.innerHTML = "";
 
-    console.log(passes);
+    //console.log(passes);
     document.getElementById("passesVariance").innerText = `Password Variance: ${getPasswordVariation32(passes)}`;
 
     let outputText = "";
@@ -140,10 +140,10 @@ refreshPasses.onclick = function() {
         outputText += passes[i].toString(16).padStart(8, '0') + " ";
     }
 
-    const elem = document.createElement("p");
-    elem.style.fontFamily = "monospace";
-    elem.textContent = outputText;
-    passwordsDisplayList.appendChild(elem);
+    passwordsDisplayList.value = outputText;
+    const passesWrapper = document.getElementById('passesWrapper');
+    passwordsDisplayList.value = outputText;
+    passesWrapper.dataset.replicatedValue = outputText;
 }
 pHashSizeInput.addEventListener("input", function() {
     if (pHashSizeInput.value == undefined || pHashSizeInput.value == "") {
@@ -152,7 +152,7 @@ pHashSizeInput.addEventListener("input", function() {
     if (pHashSizeInput.value < 1) {
         return;
     }
-    console.log(pHashSizeInput.value)
+    //console.log(pHashSizeInput.value)
     pHashSize = pHashSizeInput.value
 })
 settingsContainer.addEventListener('change', () => {

@@ -79,3 +79,29 @@ canvas {
   /* Deep brownish-gold for readability */
   display: block;
 }
+
+.grow-wrap {
+  display: grid;
+  width: 100%;
+}
+
+.grow-wrap::after {
+  /* This mirrors the text content invisibly */
+  content: attr(data-replicated-value) " ";
+  white-space: pre-wrap;
+  word-break: break-all;
+  visibility: hidden;
+  /* Matching font/padding is critical */
+  font-family: monospace;
+  padding: 5px;
+  grid-area: 1 / 1 / 2 / 2;
+}
+
+#passes {
+  grid-area: 1 / 1 / 2 / 2;
+  resize: none;
+  overflow: hidden;
+  padding: 5px;
+  border: 1px solid #ccc;
+  width: 100%;
+}

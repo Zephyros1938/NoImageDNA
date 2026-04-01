@@ -27,13 +27,11 @@ export const FLAGS = {
     "NOTGATE": 1 << 6,
     "COLORPOSITION": 1 << 7,
     "FLIPPER": 1 << 8, // In beta, fix later ;)
-    "COLORPOSITION": 1 << 9,
-      "BLOCKSWITCH": 1 << 10
+    "BARCODE": 1 << 9
 
 };
 
 export const FLAGS_ALL = Object.values(FLAGS).reduce((acc, flag) => acc | flag, 0);
-console.log(FLAGS_ALL);
 
 export function transform(pixels, width, height, decrypt = false, passwords = BASIC_SET_PASSWORDS, flags = FLAGS_ALL) {
     if (passwords == BASIC_SET_PASSWORDS) {
@@ -83,6 +81,10 @@ export function transform(pixels, width, height, decrypt = false, passwords = BA
         flag: FLAGS.COLORPOSITION,
         do: () => colorByPos(out, masterKey),
         reverse: () => colorByPos(out, masterKey)
+    }, {
+        flag: FLAGS.BARCODE,
+        do: () => applyBarcode(out, width, height, masterKey, passwords),
+        reverse: () => applyBarcode(out, width, height, masterKey, passwords)
     }];
 
     const activeOps = decrypt ? operations : [...operations].reverse();
@@ -106,15 +108,19 @@ function recursiveSwapCols(data, width, height, stride = 13) {
 
         const half = Math.floor(currentWidth / 2);
         const rightOffset = currentWidth % 2 === 0 ? half : half + 1;
+        var temp = undefined;
+        var rowOffset = 0;
+        var idxA = 0;
+        var idxB = 0;
 
         // OPTIMIZATION: Row loop outside, Column loop inside
         for (let r = 0; r < height; r++) {
-            const rowOffset = r * width + colStart;
+            rowOffset = r * width + colStart;
             for (let c = 0; c < half; c++) {
-                const idxA = rowOffset + c;
-                const idxB = rowOffset + rightOffset + c;
+                idxA = rowOffset + c;
+                idxB = rowOffset + rightOffset + c;
                 
-                const temp = data[idxA];
+                temp = data[idxA];
                 data[idxA] = data[idxB];
                 data[idxB] = temp;
             }
@@ -213,8 +219,8 @@ function notnotGate(data, mkey) {
 
 function pixelFlipper(data, mkey, b) {
     let digits = 1 << b
-    let bitNo = 32;
-    let segments = [];
+    const bitNo = 32;
+    const segments = [];
     for (let i = 1; i <= bitNo / b; i++) {
         segments.push((mkey >>> (bitNo-(i*b))) & (digits - 1)) 
     }
@@ -228,8 +234,8 @@ function pixelFlipper(data, mkey, b) {
 }
 function pixelUnflipper(data, mkey, b) {
     let digits = 1 << b
-    let bitNo = 32
-    let segments = [];
+    const bitNo = 32
+    const segments = [];
     for (let i = 1; i <= bitNo / b; i++) {
         segments.push((mkey >>> (bitNo-(i*b))) & (digits - 1)) 
     }
@@ -314,8 +320,39 @@ function swap32(val) {
         (val >> 24) & 0xFF) >>> 0;
 }
 
-function applyBlockSwitch(data, width, height, mkey, passes) {
 
+function applyBarcode(data, width, height, mkey, passes) {
+  var passT = passes[0];
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = (y * width) + x;
+      const p = passes[i % passes.length];
+      let pixel = data[i];
+      let r = pixel & 0xFF;
+      let g = (pixel >> 8) & 0xFF;
+      let b = (pixel >> 16) & 0xFF;
+      let a = (pixel >> 24) & 0xFF;
+
+      switch (i % 3) {
+        case 0:
+          r ^= passT & 0xff; break;
+        case 1:
+          g ^= passT & 0xff; break;
+        case 2:
+          b ^= passT & 0xff; break;
+      }
+      if (x % (mkey & y & (passT & 0xff)) < y % (mkey & x & (passT & 0xff))) {
+        passT = passT & p;
+      } else {
+        passT = passT | (~p ^ mkey);
+      }
+      if (x == y) {
+        passT = passes[0]
+      }
+
+      data[i] = (r | (g << 8) | (b << 16) | (a << 24));
+    }
+  }
 };
 
 const ArrayUtils = {
@@ -336,8 +373,13 @@ const ArrayUtils = {
  */
 
 export function genPasses(count = 32) {
+    
     const array = new Uint32Array(count);
-    self.crypto.getRandomValues(array);
+    const MAX_CHUNK = 16384;
+    for (let i = 0; i < count; i += MAX_CHUNK) {
+    const chunk = array.subarray(i, Math.min(i + MAX_CHUNK, count));
+    self.crypto.getRandomValues(chunk);
+  }
     return Array.from(array);
 }
 
@@ -379,8 +421,8 @@ export async function getVisualFingerprint(canvas, size = 8, displayContainerId 
     displayContainer.innerHTML = ''; 
     
     const scaleFactor = 20;
-    tempCanvas.style.width = `${(tempCanvas.width) * scaleFactor}px`; 
-    tempCanvas.style.height = `${tempCanvas.height * scaleFactor}px`;
+    tempCanvas.style.width = `${(size) * scaleFactor}px`; 
+    tempCanvas.style.height = `${size * scaleFactor}px`;
     
     tempCanvas.style.imageRendering = 'pixelated'; 
     
