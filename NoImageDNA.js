@@ -98,8 +98,8 @@ export function transform(pixels, width, height, decrypt = false, passwords = BA
         reverse: () => notnotGate(out, recursive ? passwords : [masterKey])
     }, {
         flag: FLAGS.FLIPPER,
-        do: () => pixelFlipper(out, masterKey, 7),
-        reverse: () => pixelUnflipper(out, masterKey, 7)
+        do: () => pixelFlipper(out, recursive ? passwords : [masterKey], 7),
+        reverse: () => pixelUnflipper(out, recursive ? passwords : [masterKey], 7)
     }, {
         flag: FLAGS.COLORPOSITION,
         do: () => colorByPos(out, masterKey),
@@ -114,11 +114,11 @@ export function transform(pixels, width, height, decrypt = false, passwords = BA
         reverse: () => colorUnshifter(out)
     }];
 
-    const activeOps = decrypt ? operations : [...operations].reverse();
+    const activeOps = decrypt ? [...operations].reverse() : operations;
     
     activeOps.forEach(op => {
         if ((flags & op.flag) !== 0) {
-            decrypt ? op.do() : op.reverse();
+            decrypt ? op.reverse() : op.do();
         }
     });
 
@@ -244,37 +244,44 @@ function notnotGate(data, passwords) {
   }
 }
 
-function pixelFlipper(data, mkey, b) {
+function pixelFlipper(data, passwords, b) {
     let digits = 1 << b 
     let bitNo = 32
-    let segments = [];
-    for (let i = 1; i <= bitNo / b; i++) {
-        segments.push((mkey >>> (bitNo-(i*b))) & (digits - 1)) // Split key into b-bit long sections
-    }
-    for (let i = 0; i <= data.length-digits; i++) {
-        let kbit = segments[i%segments.length]
-        if (kbit != 0) {
-            reverseSubarray(data, i, i+kbit-1)
-            reverseSubarray(data, i+kbit, i+digits-1)
-            reverseSubarray(data, i, i+digits-1)
+    const tempBuffer = new data.constructor(digits);
+    for (let mkey of passwords) {
+        const segments = new Uint32Array(bitNo/b);
+        for (let i = 1; i <= bitNo / b; i++) {
+            segments[i] = (mkey >>> (bitNo-(i*b))) & (digits - 1); // Split key into b-bit long sections
         }
-    }  
+        for (let i = 0; i <= data.length-digits; i++) {
+            let kbit = segments[i%segments.length]
+            if (kbit != 0 && kbit != digits) {
+                tempBuffer.set(data.subarray(i,i+kbit), digits-kbit)
+                tempBuffer.set(data.subarray(i+kbit, i+digits),0)
+                data.set(tempBuffer,i)
+            }
+        }  
+    }
 }
-function pixelUnflipper(data, mkey, b) {
+function pixelUnflipper(data, passwords, b) {
     let digits = 1 << b
     let bitNo = 32
-    let segments = [];
-    for (let i = 1; i <= bitNo / b; i++) {
-        segments.push((mkey >>> (bitNo-(i*b))) & (digits - 1)) // Split key into b-bit long sections
-    }
-    for (let i = data.length-digits; i >= 0; i--) {
-        let kbit = segments[i%segments.length]
-        if (kbit != 0) {
-            reverseSubarray(data, i, i+(digits-kbit)-1) 
-            reverseSubarray(data, i+(digits-kbit), i+digits-1)
-            reverseSubarray(data, i, i+digits-1)
+    const tempBuffer = new data.constructor(digits);
+    for (let j = passwords.length-1; j >= 0; j--) {
+        let mkey = passwords[j]
+        const segments = new Uint32Array(bitNo/b);
+        for (let i = 1; i <= bitNo / b; i++) {
+            segments[i] = (mkey >>> (bitNo-(i*b))) & (digits - 1) // Split key into b-bit long sections
         }
-    }  
+        for (let i = data.length-digits; i >= 0; i--) {
+            let kbit = segments[i%segments.length]
+            if (kbit != 0 && kbit != digits) {
+                tempBuffer.set(data.subarray(i,i+(digits-kbit)), kbit)
+                tempBuffer.set(data.subarray(i+(digits-kbit),i+digits),0)
+                data.set(tempBuffer,i)
+            }
+        }  
+    }
 }
 function colorByPos(data, mkey) {
   for (let i = 0; i < data.length; i++) {

@@ -79,3 +79,9 @@ canvas {
   /* Deep brownish-gold for readability */
   display: block;
 }
+
+.crypt {
+  background: #b0dcf5;
+  color: #045685;
+  display: block;
+}

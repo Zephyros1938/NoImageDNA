@@ -18,6 +18,8 @@ const settingsContainer = document.getElementById('settingsContainer');
 const recursiveContainer = document.getElementById('Recursive');
 
 const MESSAGES = {
+    "encrypting": "Encrypting...",
+    "decrypting": "Decrypting...",
     "success": "SHA-256 Hashes match, no data has been lost",
     "fail": "SHA-256 Hashes do not match, data may be degraded/corrupted",
     "closenessWarn": "SHA-256 Hashes match, but distance of pHashes under 30"
@@ -72,7 +74,18 @@ async function processImages(e) {
         };
     });
 
+    // Make sure they dont stack 2**64 passwords
+    if ((passes.length > 50 || passes.length == 0) && recursiveContainer.checked) {
+        let status = confirm(`Are you sure you want to stack ${passes.length > 0 ? passes.length : 1024} passwords?`)
+        if (!status) {
+            return;
+        }
+    }
+    const statusDiv = document.getElementById("compareStatus");
+    statusDiv.style.display = "block";
     // 2. Extract pixels
+    statusDiv.textContent = MESSAGES.encrypting;
+    statusDiv.className = "status crypt";
     const originalPixels = getPixels(canvasOrig);
     const hash1 = await sha256(originalPixels);
     const pHash1 = await getVisualFingerprint(canvasOrig, pHashSize, "preDisplayPHash");
@@ -89,6 +102,8 @@ async function processImages(e) {
     canvasEncFullAlpha.height = canvasOrig.height;
     ctxEncFullAlpha.putImageData(new ImageData(removeAlpha(encryptedPixels), canvasEncFullAlpha.width, canvasEncFullAlpha.height), 0, 0);
 
+    statusDiv.textContent = MESSAGES.decrypting;
+    statusDiv.className = "status crypt";
     const hash2 = await sha256(encryptedPixels);
     const pHash2 = await getVisualFingerprint(canvasEnc, pHashSize, "encDisplayPHash");
     document.getElementById('hashEnc').textContent = `Hash: ${hash2}`;
@@ -104,8 +119,6 @@ async function processImages(e) {
     const hash3 = await sha256(decryptedPixels);
     document.getElementById('hashDec').textContent = `Hash: ${hash3}`;
 
-    const statusDiv = document.getElementById("compareStatus");
-    statusDiv.style.display = "block";
     let hammingDistance = getHammingDistance(pHash1, pHash2);
     document.getElementById("pHashHammingDistance").innerText = hammingDistance / (pHashSize * pHashSize);
     if (hash1 === hash3) {
