@@ -323,7 +323,7 @@ const ArrayUtils = {
     if (columnIdx >= width){
       throw `columnIdx must not be larger than width! (columnIdx was ${columnIdx}, width was ${width})`;}
     return Array.from({length: height}, (_, i) => data[i * width + columnIdx]);
-  };
+  },
   getRow: (data, width, height, rowIdx) => {
     if (rowIdx >= height) {
       throw `rowIdx must not be larger than height! (rowIdx was ${rowIdx}, height was ${height}`;}
