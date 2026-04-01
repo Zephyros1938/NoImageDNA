@@ -5,7 +5,22 @@ export function getPixels(canvas) {
 
 const BASIC_SET_PASSWORDS = genPasses(1024);
 const XOR_BEST_MID = 0x7A3C19E2
-const PRIMES = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97, 101, 103, 107, 109, 113, 127, 131, 137, 139, 149, 151, 157, 163, 167, 173, 179, 181, 191, 193, 197, 199, 211, 223, 227, 229, 233, 239, 241, 251, 257, 263, 269, 271, 277, 281];
+const PRIMES = [2];
+let i = 2;
+while (PRIMES.length < 20) { // Get primes
+    let divisible = false;
+    for (let j = 2; j <= Math.ceil(Math.sqrt(i)); j++) {
+        if (i/j == Math.floor(i/j)) {
+            divisible = true;
+            break;
+        }
+    } 
+    if (!divisible) {
+        PRIMES.push(i);
+    }
+    i++;
+}
+
 const P1 = Array.from({ length: 64 }, (_, i) => (i * (i + 1)) / 2);
 
 const DIVY = Array.from({ length: 256 }, (_, i) => {
@@ -26,9 +41,10 @@ export const FLAGS = {
     "SWAPBIGCOL_P1": 1 << 5,
     "NOTGATE": 1 << 6,
     "COLORPOSITION": 1 << 7,
-    "FLIPPER": 1 << 8, // In beta, fix later ;)
+    "FLIPPER": 1 << 8, 
     "COLORPOSITION": 1 << 9,
-      "BLOCKSWITCH": 1 << 10
+    "BLOCKSWITCH": 1 << 10,
+    "INTERACTIONS2": 1 << 11
 
 };
 
@@ -83,6 +99,10 @@ export function transform(pixels, width, height, decrypt = false, passwords = BA
         flag: FLAGS.COLORPOSITION,
         do: () => colorByPos(out, masterKey),
         reverse: () => colorByPos(out, masterKey)
+    }, {
+        flag: FLAGS.INTERACTIONS2,
+        do: () => rotateClockwiseInteraction(out),
+        reverse: () => rotateCounterclockwiseInteraction(out)
     }];
 
     const activeOps = decrypt ? operations : [...operations].reverse();
@@ -212,17 +232,17 @@ function notnotGate(data, mkey) {
 }
 
 function pixelFlipper(data, mkey, b) {
-    let digits = 1 << b
-    let bitNo = 32;
+    let digits = 1 << b 
+    let bitNo = 32
     let segments = [];
     for (let i = 1; i <= bitNo / b; i++) {
-        segments.push((mkey >>> (bitNo-(i*b))) & (digits - 1)) 
+        segments.push((mkey >>> (bitNo-(i*b))) & (digits - 1)) // Split key into b-bit long sections
     }
     for (let i = 0; i <= data.length-digits; i++) {
         let kbit = segments[i%segments.length]
         let pA = data.slice(i, i+kbit)
         let pB = data.slice(i+kbit, i+digits)
-        data.set(pB,i)
+        data.set(pB,i) // Swap pA and pB
         data.set(pA,i+pB.length)
     }  
 }
@@ -231,13 +251,13 @@ function pixelUnflipper(data, mkey, b) {
     let bitNo = 32
     let segments = [];
     for (let i = 1; i <= bitNo / b; i++) {
-        segments.push((mkey >>> (bitNo-(i*b))) & (digits - 1)) 
+        segments.push((mkey >>> (bitNo-(i*b))) & (digits - 1)) // Split key into b-bit long sections
     }
     for (let i = data.length-digits; i >= 0; i--) {
         let kbit = segments[i%segments.length]
-        let pA = data.slice(i, i+(digits-kbit))
+        let pA = data.slice(i, i+(digits-kbit)) 
         let pB = data.slice(i+(digits-kbit), i+digits)
-        data.set(pB,i)
+        data.set(pB,i) // Swap pA and pB
         data.set(pA,i+pB.length)
     }  
 }
@@ -247,7 +267,7 @@ function colorByPos(data, mkey) {
     let pixel = data[i];
     let rgba = [pixel&0xFF, (pixel>>>8)&0xFF, (pixel>>>16)&0xFF, (pixel>>>24)&0xFF];
 
-    rgba[kbit] = (rgba[kbit] ^ i) & 0xFF;
+    rgba[kbit] = (rgba[kbit] ^ i) & 0xFF; // Change pixel color by xoring it with position and keeping a byte
 
     data[i] = (rgba[0] | (rgba[1] << 8) | (rgba[2] << 16) | (rgba[3] << 24))
   }  
@@ -266,6 +286,32 @@ function applyInteractions(data32) {
         b ^= a;
 
         data32[i] = (r | (g << 8) | (b << 16) | (a << 24));
+    }
+}
+function rotateClockwiseInteraction(data) {
+    for (let i = 0; i < data.length; i++) {
+        let pixel = data[i];
+        let r = pixel & 0xFF;
+        let g = (pixel >> 8) & 0xFF;
+        let b = (pixel >> 16) & 0xFF;
+        let a = (pixel >> 24) & 0xFF;
+
+        [r,g,b] = [b,r,g]
+
+        data[i] = (r | (g << 8) | (b << 16) | (a << 24));
+    }
+}
+function rotateCounterclockwiseInteraction(data) {
+    for (let i = 0; i < data.length; i++) {
+        let pixel = data[i];
+        let r = pixel & 0xFF;
+        let g = (pixel >> 8) & 0xFF;
+        let b = (pixel >> 16) & 0xFF;
+        let a = (pixel >> 24) & 0xFF;
+
+        [r,g,b] = [g,b,r]
+
+        data[i] = (r | (g << 8) | (b << 16) | (a << 24));
     }
 }
 
