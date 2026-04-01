@@ -42,9 +42,8 @@ export const FLAGS = {
     "NOTGATE": 1 << 6,
     "COLORPOSITION": 1 << 7,
     "FLIPPER": 1 << 8, 
-    "COLORPOSITION": 1 << 9,
-    "BLOCKSWITCH": 1 << 10,
-    "INTERACTIONS2": 1 << 11
+    "BLOCKSWITCH": 1 << 9,
+    "INTERACTIONS2": 1 << 10
 
 };
 
