@@ -49,8 +49,8 @@ export const FLAGS = {
     "COLORPOSITION": 1 << 7,
     "FLIPPER": 1 << 8, 
     "BLOCKSWITCH": 1 << 9,
-    "INTERACTIONS2": 1 << 10
-
+    "INTERACTIONS2": 1 << 10,
+    "SHIFTCOLOR": 1 << 11
 };
 
 export const FLAGS_ALL = Object.values(FLAGS).reduce((acc, flag) => acc | flag, 0);
@@ -108,6 +108,10 @@ export function transform(pixels, width, height, decrypt = false, passwords = BA
         flag: FLAGS.INTERACTIONS2,
         do: () => rotateClockwiseInteraction(out),
         reverse: () => rotateCounterclockwiseInteraction(out)
+    }, {
+        flag: FLAGS.SHIFTCOLOR,
+        do: () => colorShifter(out),
+        reverse: () => colorUnshifter(out)
     }];
 
     const activeOps = decrypt ? operations : [...operations].reverse();
@@ -307,7 +311,7 @@ function rotateClockwiseInteraction(data) {
         let b = (pixel >> 16) & 0xFF;
         let a = (pixel >> 24) & 0xFF;
 
-        [r,g,b] = [b,r,g]
+        [r,g,b] = [b,r,g] // rotates r g and b
 
         data[i] = (r | (g << 8) | (b << 16) | (a << 24));
     }
@@ -320,9 +324,36 @@ function rotateCounterclockwiseInteraction(data) {
         let b = (pixel >> 16) & 0xFF;
         let a = (pixel >> 24) & 0xFF;
 
-        [r,g,b] = [g,b,r]
+        [r,g,b] = [g,b,r] // rotates r g and b
 
         data[i] = (r | (g << 8) | (b << 16) | (a << 24));
+    }
+}
+
+function colorShifter(data) {
+    let t = (data[data.length-1] >> 24) & 0xFF
+    for (let i = 0; i < data.length; i++) {
+        let pixel = data[i];
+        let r = pixel & 0xFF;
+        let g = (pixel >> 8) & 0xFF;
+        let b = (pixel >> 16) & 0xFF;
+        let a = (pixel >> 24) & 0xFF;
+        let oA = a;
+        data[i] = (t | (r << 8) | (g << 16) | (b << 24));
+        t = oA;
+    }
+}
+function colorUnshifter(data) {
+    let t = data[0] & 0xFF
+    for (let i = data.length-1; i >= 0; i--) {
+        let pixel = data[i];
+        let r = pixel & 0xFF;
+        let g = (pixel >> 8) & 0xFF;
+        let b = (pixel >> 16) & 0xFF;
+        let a = (pixel >> 24) & 0xFF;
+        let oA = r;
+        data[i] = (g | (b << 8) | (a << 16) | (t << 24));
+        t = oA;
     }
 }
 
