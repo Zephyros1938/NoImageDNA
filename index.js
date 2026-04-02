@@ -165,7 +165,7 @@ downloadImage.onclick = function() {
         const fb = new Blob([blob], { type: 'application/octet-stream' });
         const url = URL.createObjectURL(fb);
         const link = document.createElement("a");
-        link.download = 'encrypted.nid';
+        link.download = 'encrypted.nid.png';
         link.href = url;
         document.body.appendChild(link);
         link.click();
