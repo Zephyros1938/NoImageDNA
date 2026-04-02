@@ -11,7 +11,7 @@
   <p><i>An API designed to help avoid ai-image and algorithmic image matching.</i></p>
   <hr>
 
-  <input type="file" id="imagePre" accept=".png, .jpg, .jpeg, .bmp">
+  <input type="file" id="imagePre" accept=".png, .jpg, .jpeg, .bmp, .nid">
   <div id="compareStatus" class="status"></div>
 
   <div class="canvas-container">
@@ -27,6 +27,7 @@
       <canvas id="canvasEnc"></canvas>
       <div class="hash-box" id="hashEnc">Hash: Pending...</div>
       <div class="hash-box" id="pHashEnc">pHash: Pending...</div>
+      <button id="downloadImage">Download</button>
     </div>
     <div class="frame">
       <h3>Information</h3>

@@ -159,6 +159,20 @@ refreshPasses.onclick = function() {
     passwordsDisplayList.value = outputText;
     passesWrapper.dataset.replicatedValue = outputText;
 }
+downloadImage.onclick = function() {
+    const canvasEnc = document.getElementById('canvasEnc');
+    canvasEnc.toBlob(function(blob) {
+        const fb = new Blob([blob], { type: 'application/octet-stream' });
+        const url = URL.createObjectURL(fb);
+        const link = document.createElement("a");
+        link.download = 'encrypted.nid';
+        link.href = url;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    }, 'image/png');
+}
 pHashSizeInput.addEventListener("input", function() {
     if (pHashSizeInput.value == undefined || pHashSizeInput.value == "") {
         return;
