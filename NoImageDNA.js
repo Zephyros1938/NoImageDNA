@@ -3,9 +3,30 @@ export function getPixels(canvas) {
     return ctx.getImageData(0, 0, canvas.width, canvas.height).data;
 }
 
+function reverseSubarray(array,start,end) {
+    while (start < end) {
+        [array[start],array[end]] = [array[end],array[start]];
+        start++; end--;
+    }
+}
 const BASIC_SET_PASSWORDS = genPasses(1024);
 const XOR_BEST_MID = 0x7A3C19E2
-const PRIMES = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97, 101, 103, 107, 109, 113, 127, 131, 137, 139, 149, 151, 157, 163, 167, 173, 179, 181, 191, 193, 197, 199, 211, 223, 227, 229, 233, 239, 241, 251, 257, 263, 269, 271, 277, 281];
+const PRIMES = [2];
+let i = 2;
+while (PRIMES.length < 20) { // Get primes
+    let divisible = false;
+    for (let j = 2; j <= Math.ceil(Math.sqrt(i)); j++) {
+        if (i/j == Math.floor(i/j)) {
+            divisible = true;
+            break;
+        }
+    } 
+    if (!divisible) {
+        PRIMES.push(i);
+    }
+    i++;
+}
+
 const P1 = Array.from({ length: 64 }, (_, i) => (i * (i + 1)) / 2);
 
 const DIVY = Array.from({ length: 256 }, (_, i) => {
@@ -27,13 +48,14 @@ export const FLAGS = {
     "NOTGATE": 1 << 6,
     "COLORPOSITION": 1 << 7,
     "FLIPPER": 1 << 8, // In beta, fix later ;)
-    "BARCODE": 1 << 9
-
+    "BARCODE": 1 << 9,
+    "INTERACTIONS2": 1 << 10,
+    "SHIFTCOLOR": 1 << 11
 };
 
 export const FLAGS_ALL = Object.values(FLAGS).reduce((acc, flag) => acc | flag, 0);
 
-export function transform(pixels, width, height, decrypt = false, passwords = BASIC_SET_PASSWORDS, flags = FLAGS_ALL) {
+export function transform(pixels, width, height, decrypt = false, passwords = BASIC_SET_PASSWORDS, flags = FLAGS_ALL, recursive) {
     if (passwords == BASIC_SET_PASSWORDS) {
         console.warn("Using default passwords, this may be insecure.")
     }
@@ -71,12 +93,12 @@ export function transform(pixels, width, height, decrypt = false, passwords = BA
         reverse: () => recursiveSwapBigRows(out, width, height, P1)
     }, {
         flag: FLAGS.NOTGATE,
-        do: () => notGate(out, masterKey),
-        reverse: () => notnotGate(out, masterKey)
+        do: () => notGate(out, passwords),
+        reverse: () => notGate(out, passwords)
     }, {
         flag: FLAGS.FLIPPER,
-        do: () => pixelFlipper(out, masterKey, 7),
-        reverse: () => pixelUnflipper(out, masterKey, 7)
+        do: () => pixelFlipper(out, recursive ? passwords : [masterKey], 7),
+        reverse: () => pixelUnflipper(out, recursive ? passwords : [masterKey], 7)
     }, {
         flag: FLAGS.COLORPOSITION,
         do: () => colorByPos(out, masterKey),
@@ -85,13 +107,21 @@ export function transform(pixels, width, height, decrypt = false, passwords = BA
         flag: FLAGS.BARCODE,
         do: () => applyBarcode(out, width, height, masterKey, passwords),
         reverse: () => applyBarcode(out, width, height, masterKey, passwords)
+    }, {
+        flag: FLAGS.INTERACTIONS2,
+        do: () => rotateClockwiseInteraction(out),
+        reverse: () => rotateCounterclockwiseInteraction(out)
+    }, {
+        flag: FLAGS.SHIFTCOLOR,
+        do: () => colorShifter(out),
+        reverse: () => colorUnshifter(out)
     }];
 
-    const activeOps = decrypt ? operations : [...operations].reverse();
+    const activeOps = decrypt ? [...operations].reverse() : operations;
     
     activeOps.forEach(op => {
         if ((flags & op.flag) !== 0) {
-            decrypt ? op.do() : op.reverse();
+            decrypt ? op.reverse() : op.do();
         }
     });
 
@@ -187,37 +217,44 @@ function applyPassword(data, mkey, keys = []) {
 
 function deplyPassword(data, mkey, keys = []) {
   for (let i = 0; i < data.length; i++) {
-    let mkey2 = mkey;
     data[i] ^= mkey;
     data[i] ^= keys[i % keys.length] | i;
-        data[i] ^= keys[keys[i % keys.length] % keys.length];
+    data[i] ^= keys[keys[i % keys.length] % keys.length];
 
   }
 }
 
-function notGate(data, mkey) {
-  for (let i = 0; i < data.length; i++) {
-    data[i] = (((mkey >>> (32 - (i%32))) & 1) == 1) ? ~data[i] : data[i]; // NOT item if position mod bit is 1
-    if ((i%32) == 31) {
-        mkey = data[i] // If data at end, replace key
+function notGate(data, passwords) {
+    let mkey = passwords[0]
+    for (let i = 0; i < data.length; i++) {
+        data[i] = (((mkey >>> (32 - (i%32))) & 1) == 1) ? ~data[i] : data[i]; // NOT item if position mod bit is 1
+        if ((i%32) == 31) {
+            mkey = passwords[Math.floor((i%passwords.length)/32)] // If data at end, replace key
+        }
     }
-  }
 }
 
-function notnotGate(data, mkey) {
-  for (let i = 0; i < data.length; i++) {
-    let mkey2 = 0
-    if ((i%32) == 31) {
-        mkey2 = data[i]
+function pixelFlipper(data, passwords, b) {
+    let digits = 1 << b 
+    let bitNo = 32
+    const tempBuffer = new data.constructor(digits);
+    for (let mkey of passwords) {
+        const segments = new Uint32Array(bitNo/b);
+        for (let i = 1; i <= bitNo / b; i++) {
+            segments[i] = (mkey >>> (bitNo-(i*b))) & (digits - 1); // Split key into b-bit long sections
+        }
+        for (let i = 0; i <= data.length-digits; i++) {
+            let kbit = segments[i%segments.length]
+            if (kbit != 0 && kbit != digits) {
+                tempBuffer.set(data.subarray(i,i+kbit), digits-kbit)
+                tempBuffer.set(data.subarray(i+kbit, i+digits),0)
+                data.set(tempBuffer,i)
+            }
+        }  
     }
-    data[i] = (((mkey >>> (32 - (i%32))) & 1) == 1) ? ~data[i] : data[i]; // NOT item if position mod bit is 1
-    if ((i%32) == 31) {
-        mkey = mkey2 // If data at end, replace key with old data
-    }
-  }
 }
 
-function pixelFlipper(data, mkey, b) {
+function pixelFlipperLegacy(data, mkey, b) {
     let digits = 1 << b
     const bitNo = 32;
     const segments = [];
@@ -232,20 +269,31 @@ function pixelFlipper(data, mkey, b) {
         data.set(pA,i+pB.length)
     }  
 }
-function pixelUnflipper(data, mkey, b) {
+function pixelUnflipperLegacy(data, mkey, b) {
     let digits = 1 << b
     const bitNo = 32
     const segments = [];
     for (let i = 1; i <= bitNo / b; i++) {
-        segments.push((mkey >>> (bitNo-(i*b))) & (digits - 1)) 
+        segments.push((mkey >>> (bitNo-(i*b))) & (digits - 1)) }}
+function pixelUnflipper(data, passwords, b) {
+    let digits = 1 << b
+    let bitNo = 32
+    const tempBuffer = new data.constructor(digits);
+    for (let j = passwords.length-1; j >= 0; j--) {
+        let mkey = passwords[j]
+        const segments = new Uint32Array(bitNo/b);
+        for (let i = 1; i <= bitNo / b; i++) {
+            segments[i] = (mkey >>> (bitNo-(i*b))) & (digits - 1) // Split key into b-bit long sections
+        }
+        for (let i = data.length-digits; i >= 0; i--) {
+            let kbit = segments[i%segments.length]
+            if (kbit != 0 && kbit != digits) {
+                tempBuffer.set(data.subarray(i,i+(digits-kbit)), kbit)
+                tempBuffer.set(data.subarray(i+(digits-kbit),i+digits),0)
+                data.set(tempBuffer,i)
+            }
+        }  
     }
-    for (let i = data.length-digits; i >= 0; i--) {
-        let kbit = segments[i%segments.length]
-        let pA = data.slice(i, i+(digits-kbit))
-        let pB = data.slice(i+(digits-kbit), i+digits)
-        data.set(pB,i)
-        data.set(pA,i+pB.length)
-    }  
 }
 function colorByPos(data, mkey) {
   for (let i = 0; i < data.length; i++) {
@@ -253,7 +301,7 @@ function colorByPos(data, mkey) {
     let pixel = data[i];
     let rgba = [pixel&0xFF, (pixel>>>8)&0xFF, (pixel>>>16)&0xFF, (pixel>>>24)&0xFF];
 
-    rgba[kbit] = (rgba[kbit] ^ i) & 0xFF;
+    rgba[kbit] = (rgba[kbit] ^ i) & 0xFF; // Change pixel color by xoring it with position and keeping a byte
 
     data[i] = (rgba[0] | (rgba[1] << 8) | (rgba[2] << 16) | (rgba[3] << 24))
   }  
@@ -272,6 +320,59 @@ function applyInteractions(data32) {
         b ^= a;
 
         data32[i] = (r | (g << 8) | (b << 16) | (a << 24));
+    }
+}
+function rotateClockwiseInteraction(data) {
+    for (let i = 0; i < data.length; i++) {
+        let pixel = data[i];
+        let r = pixel & 0xFF;
+        let g = (pixel >> 8) & 0xFF;
+        let b = (pixel >> 16) & 0xFF;
+        let a = (pixel >> 24) & 0xFF;
+
+        [r,g,b] = [b,r,g] // rotates r g and b
+
+        data[i] = (r | (g << 8) | (b << 16) | (a << 24));
+    }
+}
+function rotateCounterclockwiseInteraction(data) {
+    for (let i = 0; i < data.length; i++) {
+        let pixel = data[i];
+        let r = pixel & 0xFF;
+        let g = (pixel >> 8) & 0xFF;
+        let b = (pixel >> 16) & 0xFF;
+        let a = (pixel >> 24) & 0xFF;
+
+        [r,g,b] = [g,b,r] // rotates r g and b
+
+        data[i] = (r | (g << 8) | (b << 16) | (a << 24));
+    }
+}
+
+function colorShifter(data) {
+    let t = (data[data.length-1] >> 24) & 0xFF
+    for (let i = 0; i < data.length; i++) {
+        let pixel = data[i];
+        let r = pixel & 0xFF;
+        let g = (pixel >> 8) & 0xFF;
+        let b = (pixel >> 16) & 0xFF;
+        let a = (pixel >> 24) & 0xFF;
+        let oA = a;
+        data[i] = (t | (r << 8) | (g << 16) | (b << 24));
+        t = oA;
+    }
+}
+function colorUnshifter(data) {
+    let t = data[0] & 0xFF
+    for (let i = data.length-1; i >= 0; i--) {
+        let pixel = data[i];
+        let r = pixel & 0xFF;
+        let g = (pixel >> 8) & 0xFF;
+        let b = (pixel >> 16) & 0xFF;
+        let a = (pixel >> 24) & 0xFF;
+        let oA = r;
+        data[i] = (g | (b << 8) | (a << 16) | (t << 24));
+        t = oA;
     }
 }
 
@@ -366,20 +467,19 @@ const ArrayUtils = {
       throw `rowIdx must not be larger than height! (rowIdx was ${rowIdx}, height was ${height}`;}
     return data.slice(rowIdx * width, rowIdx * width + width);
   }
-};
+}
 
 /*
  * Password Utils
  */
 
 export function genPasses(count = 32) {
-    
     const array = new Uint32Array(count);
     const MAX_CHUNK = 16384;
     for (let i = 0; i < count; i += MAX_CHUNK) {
-    const chunk = array.subarray(i, Math.min(i + MAX_CHUNK, count));
-    self.crypto.getRandomValues(chunk);
-  }
+      const chunk = array.subarray(i, Math.min(i + MAX_CHUNK, count));
+      self.crypto.getRandomValues(chunk);
+    }
     return Array.from(array);
 }
 
@@ -424,7 +524,7 @@ export async function getVisualFingerprint(canvas, size = 8, displayContainerId 
     tempCanvas.style.width = `${(size) * scaleFactor}px`; 
     tempCanvas.style.height = `${size * scaleFactor}px`;
     
-    tempCanvas.style.imageRendering = 'pixelated'; 
+    tempCanvas.style.imageRendering  = 'pixelated'; 
     
     displayContainer.appendChild(tempCanvas);
 }

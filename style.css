@@ -105,3 +105,9 @@ canvas {
   border: 1px solid #ccc;
   width: 100%;
 }
+
+.crypt {
+  background: #b0dcf5;
+  color: #045685;
+  display: block;
+}
