@@ -47,15 +47,18 @@ export const FLAGS = {
     "SWAPBIGCOL_P1": 1 << 5,
     "NOTGATE": 1 << 6,
     "COLORPOSITION": 1 << 7,
-    "FLIPPER": 1 << 8, // In beta, fix later ;)
-    "BARCODE": 1 << 9,
+    "FLIPPER": 1 << 8, 
+    "BLOCKSWITCH": 1 << 9,
     "INTERACTIONS2": 1 << 10,
-    "SHIFTCOLOR": 1 << 11
+    "SHIFTCOLOR": 1 << 11,
+    "REVERSER": 1 << 12
 };
 
 export const FLAGS_ALL = Object.values(FLAGS).reduce((acc, flag) => acc | flag, 0);
+console.log(FLAGS_ALL);
 
 export function transform(pixels, width, height, decrypt = false, passwords = BASIC_SET_PASSWORDS, flags = FLAGS_ALL, recursive) {
+    console.log(passwords)
     if (passwords == BASIC_SET_PASSWORDS) {
         console.warn("Using default passwords, this may be insecure.")
     }
@@ -104,10 +107,6 @@ export function transform(pixels, width, height, decrypt = false, passwords = BA
         do: () => colorByPos(out, masterKey),
         reverse: () => colorByPos(out, masterKey)
     }, {
-        flag: FLAGS.BARCODE,
-        do: () => applyBarcode(out, width, height, masterKey, passwords),
-        reverse: () => applyBarcode(out, width, height, masterKey, passwords)
-    }, {
         flag: FLAGS.INTERACTIONS2,
         do: () => rotateClockwiseInteraction(out),
         reverse: () => rotateCounterclockwiseInteraction(out)
@@ -115,6 +114,10 @@ export function transform(pixels, width, height, decrypt = false, passwords = BA
         flag: FLAGS.SHIFTCOLOR,
         do: () => colorShifter(out),
         reverse: () => colorUnshifter(out)
+    }, {
+        flag: FLAGS.REVERSER,
+        do: () => pixelReverser(out, passwords, 5),
+        reverse: () => pixelVerser(out, passwords, 5)
     }];
 
     const activeOps = decrypt ? [...operations].reverse() : operations;
@@ -138,19 +141,15 @@ function recursiveSwapCols(data, width, height, stride = 13) {
 
         const half = Math.floor(currentWidth / 2);
         const rightOffset = currentWidth % 2 === 0 ? half : half + 1;
-        var temp = undefined;
-        var rowOffset = 0;
-        var idxA = 0;
-        var idxB = 0;
 
         // OPTIMIZATION: Row loop outside, Column loop inside
         for (let r = 0; r < height; r++) {
-            rowOffset = r * width + colStart;
+            const rowOffset = r * width + colStart;
             for (let c = 0; c < half; c++) {
-                idxA = rowOffset + c;
-                idxB = rowOffset + rightOffset + c;
+                const idxA = rowOffset + c;
+                const idxB = rowOffset + rightOffset + c;
                 
-                temp = data[idxA];
+                const temp = data[idxA];
                 data[idxA] = data[idxB];
                 data[idxB] = temp;
             }
@@ -225,12 +224,9 @@ function deplyPassword(data, mkey, keys = []) {
 }
 
 function notGate(data, passwords) {
-    let mkey = passwords[0]
     for (let i = 0; i < data.length; i++) {
+        let mkey = passwords[Math.floor(i/32)%passwords.length] // Change key
         data[i] = (((mkey >>> (32 - (i%32))) & 1) == 1) ? ~data[i] : data[i]; // NOT item if position mod bit is 1
-        if ((i%32) == 31) {
-            mkey = passwords[Math.floor((i%passwords.length)/32)] // If data at end, replace key
-        }
     }
 }
 
@@ -253,28 +249,6 @@ function pixelFlipper(data, passwords, b) {
         }  
     }
 }
-
-function pixelFlipperLegacy(data, mkey, b) {
-    let digits = 1 << b
-    const bitNo = 32;
-    const segments = [];
-    for (let i = 1; i <= bitNo / b; i++) {
-        segments.push((mkey >>> (bitNo-(i*b))) & (digits - 1)) 
-    }
-    for (let i = 0; i <= data.length-digits; i++) {
-        let kbit = segments[i%segments.length]
-        let pA = data.slice(i, i+kbit)
-        let pB = data.slice(i+kbit, i+digits)
-        data.set(pB,i)
-        data.set(pA,i+pB.length)
-    }  
-}
-function pixelUnflipperLegacy(data, mkey, b) {
-    let digits = 1 << b
-    const bitNo = 32
-    const segments = [];
-    for (let i = 1; i <= bitNo / b; i++) {
-        segments.push((mkey >>> (bitNo-(i*b))) & (digits - 1)) }}
 function pixelUnflipper(data, passwords, b) {
     let digits = 1 << b
     let bitNo = 32
@@ -293,6 +267,25 @@ function pixelUnflipper(data, passwords, b) {
                 data.set(tempBuffer,i)
             }
         }  
+    }
+}
+
+function pixelReverser(data, passwords, s) {
+    for (let i = 0; i < data.length-s; i++) {
+        let mkey = passwords[Math.floor(i/32)%passwords.length];
+        let kbit = ((mkey >>> (32 - (i%32))) & 1);
+        if (kbit == 1) {
+            reverseSubarray(data, i, i+s);
+        }
+    }
+}
+function pixelVerser(data, passwords, s) {
+    for (let i = data.length-(s+1); i >= 0; i--) {
+        let mkey = passwords[Math.floor(i/32) % passwords.length];
+        let kbit = ((mkey >>> (32 - (i%32))) & 1);
+        if (kbit == 1) {
+            reverseSubarray(data, i, i+s);
+        }
     }
 }
 function colorByPos(data, mkey) {
@@ -421,39 +414,8 @@ function swap32(val) {
         (val >> 24) & 0xFF) >>> 0;
 }
 
+function applyBlockSwitch(data, width, height, mkey, passes) {
 
-function applyBarcode(data, width, height, mkey, passes) {
-  var passT = passes[0];
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const i = (y * width) + x;
-      const p = passes[i % passes.length];
-      let pixel = data[i];
-      let r = pixel & 0xFF;
-      let g = (pixel >> 8) & 0xFF;
-      let b = (pixel >> 16) & 0xFF;
-      let a = (pixel >> 24) & 0xFF;
-
-      switch (i % 3) {
-        case 0:
-          r ^= passT & 0xff; break;
-        case 1:
-          g ^= passT & 0xff; break;
-        case 2:
-          b ^= passT & 0xff; break;
-      }
-      if (x % (mkey & y & (passT & 0xff)) < y % (mkey & x & (passT & 0xff))) {
-        passT = passT & p;
-      } else {
-        passT = passT | (~p ^ mkey);
-      }
-      if (x == y) {
-        passT = passes[0]
-      }
-
-      data[i] = (r | (g << 8) | (b << 16) | (a << 24));
-    }
-  }
 };
 
 const ArrayUtils = {
@@ -467,7 +429,7 @@ const ArrayUtils = {
       throw `rowIdx must not be larger than height! (rowIdx was ${rowIdx}, height was ${height}`;}
     return data.slice(rowIdx * width, rowIdx * width + width);
   }
-}
+};
 
 /*
  * Password Utils
@@ -475,11 +437,7 @@ const ArrayUtils = {
 
 export function genPasses(count = 32) {
     const array = new Uint32Array(count);
-    const MAX_CHUNK = 16384;
-    for (let i = 0; i < count; i += MAX_CHUNK) {
-      const chunk = array.subarray(i, Math.min(i + MAX_CHUNK, count));
-      self.crypto.getRandomValues(chunk);
-    }
+    self.crypto.getRandomValues(array);
     return Array.from(array);
 }
 
@@ -521,10 +479,10 @@ export async function getVisualFingerprint(canvas, size = 8, displayContainerId 
     displayContainer.innerHTML = ''; 
     
     const scaleFactor = 20;
-    tempCanvas.style.width = `${(size) * scaleFactor}px`; 
-    tempCanvas.style.height = `${size * scaleFactor}px`;
+    tempCanvas.style.width = `${(tempCanvas.width) * scaleFactor}px`; 
+    tempCanvas.style.height = `${tempCanvas.height * scaleFactor}px`;
     
-    tempCanvas.style.imageRendering  = 'pixelated'; 
+    tempCanvas.style.imageRendering = 'pixelated'; 
     
     displayContainer.appendChild(tempCanvas);
 }
