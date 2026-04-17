@@ -62,8 +62,15 @@
     <div class="frame">
       <h3>Passwords</h3>
       <button id="refreshPasses">Refresh Passwords</button>
-      <form> <label for="numPasses">Number of passes (1-16384)</label> <input type="number" id="numPasses"
-          name="numPasses" min="1" max="16384"></form>
+      <button id="downloadPasses">Download Passwords</button>
+      <form>
+        <label for="importPasses">Import Passwords</label>
+        <input type="file" accept=".nidnap" id="importPasses" name="importPasses">
+      </form>
+      <form>
+        <label for="numPasses">Number of passes (1-16384)</label>
+        <input type="number" id="numPasses" name="numPasses" min="1" max="16384">
+      </form>
       <p>Standard amount of passwords is 256</p>
       <span id="passesVariance"></span>
       <div class="canvas-container">

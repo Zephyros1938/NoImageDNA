@@ -47,11 +47,12 @@ export const FLAGS = {
     "SWAPBIGCOL_P1": 1 << 5,
     "NOTGATE": 1 << 6,
     "COLORPOSITION": 1 << 7,
-    "FLIPPER": 1 << 8, 
-    "BLOCKSWITCH": 1 << 9,
-    "INTERACTIONS2": 1 << 10,
-    "SHIFTCOLOR": 1 << 11,
-    "REVERSER": 1 << 12
+    "FLIPPER": 1 << 8,
+    "FLIPPER_LEGACY": 1 << 9,
+    "BARCODE": 1 << 10,
+    "INTERACTIONS2": 1 << 11,
+    "SHIFTCOLOR": 1 << 12,
+    "REVERSER": 1 << 13
 };
 
 export const FLAGS_ALL = Object.values(FLAGS).reduce((acc, flag) => acc | flag, 0);
@@ -99,13 +100,21 @@ export function transform(pixels, width, height, decrypt = false, passwords = BA
         do: () => notGate(out, passwords),
         reverse: () => notGate(out, passwords)
     }, {
-        flag: FLAGS.FLIPPER,
-        do: () => pixelFlipper(out, recursive ? passwords : [masterKey], 7),
-        reverse: () => pixelUnflipper(out, recursive ? passwords : [masterKey], 7)
-    }, {
         flag: FLAGS.COLORPOSITION,
         do: () => colorByPos(out, masterKey),
         reverse: () => colorByPos(out, masterKey)
+    }, {
+        flag: FLAGS.FLIPPER,
+        do: () => pixelFlipper(out, recursive ? passwords : [masterKey], 7),
+        reverse: () => pixelUnflipper(out, recursive ? passwords : [masterKey], 7)
+    },{
+        flag: FLAGS.FLIPPER_LEGACY,
+        do: () => pixelFlipperLegacy(out, masterKey, 7),
+        reverse: () => pixelUnflipperLegacy(out, masterKey, 7)
+    }, {
+        flag: FLAGS.BARCODE,
+        do: () => applyBarcode(out, width, height, masterKey, passwords),
+        reverse: () => applyBarcode(out, width, height, masterKey, passwords)
     }, {
         flag: FLAGS.INTERACTIONS2,
         do: () => rotateClockwiseInteraction(out),
@@ -224,6 +233,7 @@ function deplyPassword(data, mkey, keys = []) {
 }
 
 function notGate(data, passwords) {
+    let mkey = passwords[(passwords.reduce((acc, p) => acc ^ p, 0) >>> 0) % passwords.length]
     for (let i = 0; i < data.length; i++) {
         let mkey = passwords[Math.floor(i/32)%passwords.length] // Change key
         data[i] = (((mkey >>> (32 - (i%32))) & 1) == 1) ? ~data[i] : data[i]; // NOT item if position mod bit is 1
@@ -237,7 +247,7 @@ function pixelFlipper(data, passwords, b) {
     for (let mkey of passwords) {
         const segments = new Uint32Array(bitNo/b);
         for (let i = 1; i <= bitNo / b; i++) {
-            segments[i] = (mkey >>> (bitNo-(i*b))) & (digits - 1); // Split key into b-bit long sections
+            segments[i-1] = (mkey >>> (bitNo-(i*b))) & (digits - 1); // Split key into b-bit long sections
         }
         for (let i = 0; i <= data.length-digits; i++) {
             let kbit = segments[i%segments.length]
@@ -249,6 +259,7 @@ function pixelFlipper(data, passwords, b) {
         }  
     }
 }
+
 function pixelUnflipper(data, passwords, b) {
     let digits = 1 << b
     let bitNo = 32
@@ -257,7 +268,7 @@ function pixelUnflipper(data, passwords, b) {
         let mkey = passwords[j]
         const segments = new Uint32Array(bitNo/b);
         for (let i = 1; i <= bitNo / b; i++) {
-            segments[i] = (mkey >>> (bitNo-(i*b))) & (digits - 1) // Split key into b-bit long sections
+            segments[i-1] = (mkey >>> (bitNo-(i*b))) & (digits - 1) // Split key into b-bit long sections
         }
         for (let i = data.length-digits; i >= 0; i--) {
             let kbit = segments[i%segments.length]
@@ -267,6 +278,37 @@ function pixelUnflipper(data, passwords, b) {
                 data.set(tempBuffer,i)
             }
         }  
+    }
+}
+
+function pixelFlipperLegacy(data, mkey, b) {
+    let digits = 1 << b
+    const bitNo = 32;
+    const segments = [];
+    for (let i = 1; i <= bitNo / b; i++) {
+        segments.push((mkey >>> (bitNo-(i*b))) & (digits - 1)) 
+    }
+    for (let i = 0; i <= data.length-digits; i++) {
+        let kbit = segments[i%segments.length]
+        let pA = data.slice(i, i+kbit)
+        let pB = data.slice(i+kbit, i+digits)
+        data.set(pB,i)
+        data.set(pA,i+pB.length)
+    }  
+}
+function pixelUnflipperLegacy(data, mkey, b) {
+    let digits = 1 << b
+    const bitNo = 32
+    const segments = [];
+    for (let i = 1; i <= bitNo / b; i++) {
+        segments.push((mkey >>> (bitNo-(i*b))) & (digits - 1)) 
+    }
+    for (let i = data.length-digits; i >= 0; i--) {
+        let kbit = segments[i%segments.length]
+        let pA = data.slice(i, i+(digits-kbit))
+        let pB = data.slice(i+(digits-kbit), i+digits)
+        data.set(pB,i)
+        data.set(pA,i+pB.length)
     }
 }
 
@@ -288,6 +330,7 @@ function pixelVerser(data, passwords, s) {
         }
     }
 }
+
 function colorByPos(data, mkey) {
   for (let i = 0; i < data.length; i++) {
     let kbit = (mkey >>> (30 - (i % 16))) & 0b11;
@@ -407,15 +450,50 @@ function reverseInteractions(data32) {
     }
 }
 
-function swap32(val) {
+export function swap32(val) {
     return ((val & 0xFF) << 24 |
         (val & 0xFF00) << 8 |
         (val & 0xFF0000) >> 8 |
         (val >> 24) & 0xFF) >>> 0;
 }
 
-function applyBlockSwitch(data, width, height, mkey, passes) {
+export function swap32a(arr) {
+  return arr.map(swap32);
+}
 
+
+function applyBarcode(data, width, height, mkey, passes) {
+  var passT = passes[0];
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = (y * width) + x;
+      const p = passes[i % passes.length];
+      let pixel = data[i];
+      let r = pixel & 0xFF;
+      let g = (pixel >> 8) & 0xFF;
+      let b = (pixel >> 16) & 0xFF;
+      let a = (pixel >> 24) & 0xFF;
+
+      switch (i % 3) {
+        case 0:
+          r ^= passT & 0xff; break;
+        case 1:
+          g ^= passT & 0xff; break;
+        case 2:
+          b ^= passT & 0xff; break;
+      }
+      if (x % (mkey & y & (passT & 0xff)) < y % (mkey & x & (passT & 0xff))) {
+        passT = passT & p;
+      } else {
+        passT = passT | (~p ^ mkey);
+      }
+      if (x == y) {
+        passT = passes[0];
+      }
+
+      data[i] = (r | (g << 8) | (b << 16) | (a << 24));
+    }
+  }
 };
 
 const ArrayUtils = {
@@ -507,4 +585,44 @@ export function getHammingDistance(h1, h2) {
         if (h1[i] !== h2[i]) distance++;
     }
     return distance;
+}
+
+/*
+ * Storage Utils
+ */
+
+const StorageUtils = {
+  Cookie: {
+    setCookie: (name, value, days) => {
+      let expires = "";
+      if (days) {
+        let date = new Date();
+        date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
+        expires = ";expires=" + date.toUTCString();
+      }
+      document.cookie = name + (value || "") + expires + "; path=/; SameSite=Lax";
+    },
+    getCookie: (name) => {
+      let nameEQ = name + "=";
+      let ca = document.cookie.split(';');
+      for (let i = 0; i < ca.length; i++) {
+        let c = ca[i];
+        while (c.charAt(0) == ' ') c = c.substring(1, c.length);
+        if (c.indexOf(nameEQ) == 0) return c.substring(nameEQ.length, c.length);
+      }
+      return null; // Return null if not found
+    },
+    eraseCookie(name) {
+      document.cookie = name + '=; Max-Age=-99999999; path=/;';
+    }
+  },
+  LocalStorage: {
+    setItem: (name, val) => {localStorage.setItem(name, val);},
+    getItem: (name) => {return localStorage.getItem(name);},
+    exists: (name) => {return localStorage.getItem(name) !== null;},
+    removeItem: (name) => {localStorage.removeItem(name);},
+    clear() {localStorage.clear();},
+    setJSON: (name, dict) => {localStorage.setItem(name, JSON.stringify(dict));},
+    getJSON: (name) => {return JSON.parse(localStorage.getItem(name));}
+  }
 }

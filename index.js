@@ -6,6 +6,7 @@ import {
     getPasswordVariation32,
     getVisualFingerprint,
     getHammingDistance,
+    swap32a,
     FLAGS, FLAGS_ALL
 } from './NoImageDNA.js';
 
@@ -136,17 +137,41 @@ async function processImages(e) {
     }
 }
 
-/*
- * Event Listeners
- * */
+async function exportPasswords() {
+  try {
+    const checksum = passes.reduce((acc, p) => acc ^ p, 0) >>> 0;
+    const fileName = `NoImageDNA_Passwords_${checksum}.nidnap`;
 
-imagePreInput.addEventListener('change', processImages);
-refreshPasses.onclick = function() {
-    const numPasses = document.getElementById("numPasses").value;
-    passes = genPasses(numPasses);
+    const blob = new Blob([new Uint32Array(swap32a(passes))], { type: 'application/octet-stream' });
 
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    console.error("Error generating password download:", err);
+  }
+}
 
-    //console.log(passes);
+async function importPasswords(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const buffer = await file.arrayBuffer();
+  if (buffer.byteLength % 4 !== 0) {
+    console.warn("File size is not a multiple of 4 bytes. Some data might be trailing.");
+  }
+  setPasswords(Array.from(new Uint32Array(buffer)));
+
+}
+
+function setPasswords(passwords) {
+    passes = passwords;
+
     document.getElementById("passesVariance").innerText = `Password Variance: ${getPasswordVariation32(passes)}`;
 
     let outputText = "";
@@ -159,6 +184,22 @@ refreshPasses.onclick = function() {
     passwordsDisplayList.value = outputText;
     passesWrapper.dataset.replicatedValue = outputText;
 }
+
+/*
+ * Event Listeners
+ * */
+
+imagePreInput.addEventListener('change', processImages);
+refreshPasses.onclick = function() {
+    const numPasses = document.getElementById("numPasses").value;
+    setPasswords(genPasses(numPasses));
+}
+document.getElementById("downloadPasses").onclick = function() {
+  if (passes.length !== 0 && passes !== undefined) {
+    exportPasswords();
+  }
+}
+document.getElementById("importPasses").addEventListener("change", importPasswords);
 downloadImage.onclick = function() {
     const canvasEnc = document.getElementById('canvasEnc');
     canvasEnc.toBlob(function(blob) {
@@ -207,3 +248,4 @@ settingsContainer.addEventListener('change', () => {
   document.getElementById('settingsEnabled').textContent = mask;
   //document.getElementById('active-flags').textContent = activeNames.join(', ') || 'None';
 });
+
