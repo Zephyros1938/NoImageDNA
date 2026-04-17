@@ -55,10 +55,14 @@ export const FLAGS = {
     "REVERSER": 1 << 13
 };
 
+export const STANDARDS = {
+    "NONE": 0,
+    "AESPASS": 1,
+};
 export const FLAGS_ALL = Object.values(FLAGS).reduce((acc, flag) => acc | flag, 0);
 console.log(FLAGS_ALL);
 
-export function transform(pixels, width, height, decrypt = false, passwords = BASIC_SET_PASSWORDS, flags = FLAGS_ALL, recursive) {
+export function transform(pixels, width, height, decrypt = false, passwords = BASIC_SET_PASSWORDS, flags = FLAGS_ALL, recursive, standardChoice) {
     console.log(passwords)
     if (passwords == BASIC_SET_PASSWORDS) {
         console.warn("Using default passwords, this may be insecure.")
@@ -71,7 +75,7 @@ export function transform(pixels, width, height, decrypt = false, passwords = BA
     const out = new Uint32Array(pixels.buffer);
     const masterKey = passwords.reduce((acc, p) => acc ^ p, 0) >>> 0;
 
-    const operations = [{
+    const operationsFlags = [{
         flag: FLAGS.PASSWORD,
         do: () => applyPassword(out, masterKey, passwords),
         reverse: () => deplyPassword(out, masterKey, passwords)
@@ -129,13 +133,22 @@ export function transform(pixels, width, height, decrypt = false, passwords = BA
         reverse: () => pixelVerser(out, passwords, 5)
     }];
 
-    const activeOps = decrypt ? [...operations].reverse() : operations;
-    
-    activeOps.forEach(op => {
-        if ((flags & op.flag) !== 0) {
-            decrypt ? op.reverse() : op.do();
+    const operationsStandard = {
+        [STANDARDS.AESPASS]: {
+            do: () => doAES(out, passwords),
+            reverse: () => undoAES(out, passwords)
         }
-    });
+    }
+    if (standardChoice == 0) {
+        const activeOps = decrypt ? [...operationsFlags].reverse() : operationsFlags;
+        activeOps.forEach(op => {
+            if ((flags & op.flag) !== 0) {
+                decrypt ? op.reverse() : op.do();
+            }
+        });
+    } else {
+        decrypt ? operationsStandard[standardChoice].reverse() : operationsStandard[standardChoice].do();
+    }
 
     return new Uint8ClampedArray(out.buffer);
 }
@@ -412,6 +425,13 @@ function colorUnshifter(data) {
     }
 }
 
+function doAES(data, passwords) {
+    console.log("Do AES");
+}
+
+function undoAES(data, passwords) {
+    console.log("Undo AES");
+}
 function swapEndianness32(n) {
   return ((n & 0xFF) << 24) | 
     ((n & 0xFF00) << 8) | 

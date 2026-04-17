@@ -7,7 +7,8 @@ import {
     getVisualFingerprint,
     getHammingDistance,
     swap32a,
-    FLAGS, FLAGS_ALL
+    FLAGS, FLAGS_ALL,
+    STANDARDS
 } from './NoImageDNA.js';
 
 const imagePreInput = document.getElementById("imagePre");
@@ -16,6 +17,7 @@ const passwordsRefreshButton = document.getElementById("refreshPasses");
 const passwordsDisplayList = document.getElementById("passes");
 const pHashSizeInput = document.getElementById("pHashSize");
 const settingsContainer = document.getElementById('settingsContainer');
+const standardsContainer = document.getElementById('standardEncryption');
 const recursiveContainer = document.getElementById('Recursive');
 
 const MESSAGES = {
@@ -36,11 +38,23 @@ Object.entries(FLAGS).forEach(([name, value]) => {
   //console.log(name, value);
   
   label.innerHTML = `
-    <input type="checkbox" value="${value}" data-name="${name}">
+    <input type="checkbox" value="${value}" data-name="${name}" checked>
     ${name} (Bit: ${value})
   `;
   
   settingsContainer.appendChild(label);
+});
+Object.entries(STANDARDS).forEach(([name, value]) => {
+  const label = document.createElement('label');
+  label.style.display = 'block';
+  //console.log(name, value);
+  
+  label.innerHTML = `
+    <input type="radio" value="${value}" name="standards" data-name="${name}" ${value == 0 ? "checked" : ""}>
+    ${name} (Value: ${value})
+  `;
+  
+  standardsContainer.appendChild(label);
 });
 
 async function sha256(uint8Array) {
@@ -85,16 +99,24 @@ async function processImages(e) {
     }
     const statusDiv = document.getElementById("compareStatus");
     statusDiv.style.display = "block";
-    // 2. Extract pixels
+
+    // Change status
     statusDiv.textContent = MESSAGES.encrypting;
     statusDiv.className = "status crypt";
+
+    // Get selected radio
+    const standard = document.querySelector('input[name="standards"]:checked').value;
+
+    // 2. Extract pixels
     const originalPixels = getPixels(canvasOrig);
     const hash1 = await sha256(originalPixels);
     const pHash1 = await getVisualFingerprint(canvasOrig, pHashSize, "preDisplayPHash");
     document.getElementById('hashOrig').textContent = `Hash: ${hash1}`;
     document.getElementById('pHashOrig').textContent = `pHash: ${parseInt(pHash1, 2).toString(16)}`;
 
-    const encryptedPixels = transform(originalPixels, canvasOrig.width, canvasOrig.height, false, passes.length !== 0 ? passes : undefined,settings, recursiveContainer.checked);
+    const encryptedPixels = transform(originalPixels, canvasOrig.width, canvasOrig.height, false, passes.length !== 0 ? passes : undefined,settings, recursiveContainer.checked, standard);
+
+    // Render image
 
     canvasEnc.width = canvasOrig.width;
     canvasEnc.height = canvasOrig.height;
@@ -104,6 +126,7 @@ async function processImages(e) {
     canvasEncFullAlpha.height = canvasOrig.height;
     ctxEncFullAlpha.putImageData(new ImageData(removeAlpha(encryptedPixels), canvasEncFullAlpha.width, canvasEncFullAlpha.height), 0, 0);
 
+    // Change status
     statusDiv.textContent = MESSAGES.decrypting;
     statusDiv.className = "status crypt";
     const hash2 = await sha256(encryptedPixels);
@@ -111,8 +134,8 @@ async function processImages(e) {
     document.getElementById('hashEnc').textContent = `Hash: ${hash2}`;
     document.getElementById('pHashEnc').textContent = `pHash: ${parseInt(pHash2, 2).toString(16)}`;
 
-    //  Decrypt 
-    const decryptedPixels = transform(encryptedPixels, canvasOrig.width, canvasOrig.height, true, passes.length !== 0 ? passes : undefined, settings, recursiveContainer.checked);
+    // 3. Decrypt 
+    const decryptedPixels = transform(encryptedPixels, canvasOrig.width, canvasOrig.height, true, passes.length !== 0 ? passes : undefined, settings, recursiveContainer.checked, standard);
 
     canvasDec.width = canvasOrig.width;
     canvasDec.height = canvasOrig.height;
@@ -121,6 +144,7 @@ async function processImages(e) {
     const hash3 = await sha256(decryptedPixels);
     document.getElementById('hashDec').textContent = `Hash: ${hash3}`;
 
+    // Get hamming, Change status
     let hammingDistance = getHammingDistance(pHash1, pHash2);
     document.getElementById("pHashHammingDistance").innerText = hammingDistance / (pHashSize * pHashSize);
     if (hash1 === hash3) {
