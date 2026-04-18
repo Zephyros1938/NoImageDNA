@@ -1,3 +1,7 @@
+import {
+    substitution8Bit,
+    inverseSubstitution8Bit 
+} from './Tables.js';
 export function getPixels(canvas) {
     const ctx = canvas.getContext('2d');
     return ctx.getImageData(0, 0, canvas.width, canvas.height).data;
@@ -9,6 +13,12 @@ function reverseSubarray(array,start,end) {
         start++; end--;
     }
 }
+
+function takeNBitsAtM(integer, intsize, n, m) {
+    integer = integer >>> (intsize - (m+n));
+    return integer & ((1 << n) - 1);
+}
+
 const BASIC_SET_PASSWORDS = genPasses(1024);
 const XOR_BEST_MID = 0x7A3C19E2
 const PRIMES = [2];
