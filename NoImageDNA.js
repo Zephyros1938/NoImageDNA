@@ -67,7 +67,7 @@ export const FLAGS = {
 
 export const STANDARDS = {
     "NONE": 0,
-    "AESPASS": 1,
+    "BLOCKTHING": 1,
 };
 export const FLAGS_ALL = Object.values(FLAGS).reduce((acc, flag) => acc | flag, 0);
 console.log(FLAGS_ALL);
@@ -145,8 +145,8 @@ export function transform(pixels, width, height, decrypt = false, passwords = BA
 
     const operationsStandard = {
         [STANDARDS.AESPASS]: {
-            do: () => doAES(out, passwords),
-            reverse: () => undoAES(out, passwords)
+            do: () => doBlock(out, passwords),
+            reverse: () => undoBlock(out, passwords)
         }
     }
     if (standardChoice == 0) {
@@ -435,12 +435,12 @@ function colorUnshifter(data) {
     }
 }
 
-function doAES(data, passwords) {
-    console.log("Do AES");
+function doBlock(data, passwords) {
+    console.log("Do Block");
 }
 
-function undoAES(data, passwords) {
-    console.log("Undo AES");
+function doBlock(data, passwords) {
+    console.log("Undo Block");
 }
 function swapEndianness32(n) {
   return ((n & 0xFF) << 24) | 
