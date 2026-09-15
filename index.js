@@ -273,3 +273,8 @@ settingsContainer.addEventListener('change', () => {
   //document.getElementById('active-flags').textContent = activeNames.join(', ') || 'None';
 });
 
+document.getElementById('uncheckSettings').onclick = function() {
+  settingsContainer.querySelectorAll('input:checked').forEach(i => {
+    i.checked = false;
+  });
+}

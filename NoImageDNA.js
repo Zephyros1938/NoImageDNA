@@ -1,7 +1,3 @@
-import {
-    substitution8Bit,
-    inverseSubstitution8Bit 
-} from './Tables.js';
 export function getPixels(canvas) {
     const ctx = canvas.getContext('2d');
     return ctx.getImageData(0, 0, canvas.width, canvas.height).data;
@@ -94,7 +90,7 @@ export const FLAGS = {
 
 export const STANDARDS = {
     "NONE": 0,
-    "PSEUDOAES": 1,
+    "PSEUDOAES": 1
 };
 export const FLAGS_ALL = Object.values(FLAGS).reduce((acc, flag) => acc | flag, 0);
 console.log(FLAGS_ALL);
@@ -174,12 +170,12 @@ export function transform(pixels, width, height, decrypt = false, passwords = BA
         reverse: () => stitute(out)
     }, {
         flag: FLAGS.SWAPBIGROW_KEY,
-        do: () => rowSwapKey(out, width, height, masterKey, true),
-        reverse: () => rowSwapKey(out, width, height, masterKey, false)
+        do: () => rowSwapKey(out, width, height, masterKey),
+        reverse: () => rowUnswapKey(out, width, height, masterKey)
     }, {
         flag: FLAGS.SWAPBIGCOL_KEY,
-        do: () => colSwapKey(out, width, height, masterKey, true),
-        reverse: () => colSwapKey(out, width, height, masterKey, false)
+        do: () => colSwapKey(out, width, height, masterKey),
+        reverse: () => colUnswapKey(out, width, height, masterKey)
     }];
 
     const operationsStandard = {
@@ -189,7 +185,6 @@ export function transform(pixels, width, height, decrypt = false, passwords = BA
         }
     }
 
-    console.log(standardChoice);
     if (standardChoice == 0) {
         const activeOps = decrypt ? [...operationsFlags].reverse() : operationsFlags;
         activeOps.forEach(op => {
@@ -538,31 +533,108 @@ function stitute(data) {
     }
 }
 
-function rowSwapKey(data, w, h, m, encrypt) {
-    // TODO
+function nextRandom(state) {
+    state ^= state << 13;
+    state ^= state >>> 17;
+    state ^= state << 5;
+    return state >>> 0;
 }
 
-function colSwapKey(data, w, h, m, encrypt) {
-    // TODO, probably best to rearrange the data, rowSwap, then unrearrange the data lol
+function rowSwapKey(data, w, h, m) {
+    const temp = new Uint32Array(w);
+    let state = m >>> 0;
+
+    for (let i = h-1; i > 0; i--) {
+        state = nextRandom(state);
+
+        const j = Math.floor(state * (i+1));
+
+        const a = i * w;
+        const b = j * w;
+
+        temp.set(data.subarray(a, a + w));
+        data.copyWithin(a, b, b + w);
+        data.set(temp, b);
+    }
 }
+
+
+function rowUnswapKey(data, w, h, m) {
+    const temp = new Uint32Array(w);
+    function rseed(seed) {
+        const mn = Math.sin(seed) * 10000;
+        return mn - Math.floor(mn);
+    }
+
+    const swaps = [];
+    for (let i = h-1; i > 0; i--) {
+        state = nextRandom(state);
+        const j = Math.floor(state * (i+1));
+
+        swaps.push([i,j])
+    }
+
+    for (let k = swaps.length - 1; k >= 0; k--) {
+        const [i,j] = swaps[k];
+
+        const a = i * w;
+        const b = j * w;
+
+        temp.set(data.subarray(a, a + w));
+        data.copyWithin(a, b, b + w);
+        data.set(temp, b);
+    }
+}
+
+function rowColumnSwap(data, w, h) {
+    const data2 = new Uint32Array(data.length);
+
+    for (let i = 0, src = 0; i < w; i++) {
+        for (let d = 0, dst = i; d < h; d++, src++, dst += w) {
+            data2[dst] = data[src];
+        }
+    }
+
+    data.set(data2);
+}
+
+function colSwapKey(data, w, h, m) {
+    rowColumnSwap(data, w, h);
+    rowSwapKey(data, h, w, m);
+    rowColumnSwap(data, h, w);
+}
+
+function colUnswapKey(data, w, h, m) {
+    rowColumnSwap(data, w, h);
+    rowUnswapKey(data, h, w, m);
+    rowColumnSwap(data, h, w);
+}
+
 
 function pseudoAES(data, w, h, passwords) {
-    for (var i in passwords) {
+    for (let j = 0; j < passwords.length; j++) {
+        let i = passwords[j];
+        if (j%100==0) {
+            console.log(j);
+        }
         applyPassword(data, i, passwords);
         substitute(data);
-        rowSwapKey(data, w, h, i, true);
-        colSwapKey(data, w, h, i, true);
-        applyPassword(data, i, passwords);
+        rowSwapKey(data, w, h, i);
+        colSwapKey(data, w, h, i);
     }
 }
 
 function pseundoAES(data, w, h, passwords) {
-    for (var i in passwords) {
-        deplyPassword(data, i, passwords);
+    for (let j = passwords.length - 1; j >= 0; j--) {
+        let i = passwords[j];
+        if (j%100==0) {
+            console.log(j);
+        }
         stitute(data);
-        colSwapKey(data, w, h, i, false);
-        rowSwapKey(data, w, h, i, false);
-        deplyPassword(data, i, passwords);
+        // Add diffusion here
+        colUnswapKey(data, w, h, i);
+        rowUnswapKey(data, w, h, i);
+        deplyPassword(data, i, passwords);// Change this to key mix
     }
 }
 
