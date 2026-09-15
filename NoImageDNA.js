@@ -22,6 +22,29 @@ function takeNBitsAtM(integer, intsize, n, m) {
 const BASIC_SET_PASSWORDS = genPasses(1024);
 const XOR_BEST_MID = 0x7A3C19E2
 const PRIMES = [2];
+
+function ROTL8(x,shift) {
+    return ((x) << (shift)) | ((x) >>> (8 - (shift))) & 0xff;
+}
+
+let sBox = new Uint8Array(256);
+let isBox = new Uint8Array(256);
+
+let p = 1, q = 1;
+do {
+    p = (p ^ (p << 1) ^ (p & 0x80 ? 0x1B : 0)) & 0xff;
+    q ^= q << 1;
+    q ^= q << 2;
+    q ^= q << 4;
+    q ^= q & 0x80 ? 0x09 : 0;
+    q &= 0xff;
+
+    let r = q ^ ROTL8(q, 1) ^ ROTL8(q, 2) ^ ROTL8(q, 3) ^ ROTL8(q, 4);
+    sBox[p] = (r ^ 0x63) & 0xff;
+    isBox[(r ^ 0x63) & 0xff] = p;
+} while (p != 1);
+sBox[0] = 0x63;
+isBox[0x63] = 0;
 let i = 2;
 while (PRIMES.length < 20) { // Get primes
     let divisible = false;
@@ -48,6 +71,7 @@ const DIVY = Array.from({ length: 256 }, (_, i) => {
     }
     return Number(res) >>> 0;
 });
+
 export const FLAGS = {
     "PASSWORD": 1 << 0,
     "SWAPBIGROW": 1 << 1,
@@ -62,12 +86,15 @@ export const FLAGS = {
     "BARCODE": 1 << 10,
     "INTERACTIONS2": 1 << 11,
     "SHIFTCOLOR": 1 << 12,
-    "REVERSER": 1 << 13
+    "REVERSER": 1 << 13,
+    "SUBSTITUTION": 1 << 14,
+    "SWAPBIGROW_KEY": 1 << 15,
+    "SWAPBIGCOL_KEY": 1 << 16
 };
 
 export const STANDARDS = {
     "NONE": 0,
-    "BLOCKTHING": 1,
+    "PSEUDOAES": 1,
 };
 export const FLAGS_ALL = Object.values(FLAGS).reduce((acc, flag) => acc | flag, 0);
 console.log(FLAGS_ALL);
@@ -141,14 +168,28 @@ export function transform(pixels, width, height, decrypt = false, passwords = BA
         flag: FLAGS.REVERSER,
         do: () => pixelReverser(out, passwords, 5),
         reverse: () => pixelVerser(out, passwords, 5)
+    }, {
+        flag: FLAGS.SUBSTITUTION,
+        do: () => substitute(out),
+        reverse: () => stitute(out)
+    }, {
+        flag: FLAGS.SWAPBIGROW_KEY,
+        do: () => rowSwapKey(out, width, height, masterKey, true),
+        reverse: () => rowSwapKey(out, width, height, masterKey, false)
+    }, {
+        flag: FLAGS.SWAPBIGCOL_KEY,
+        do: () => colSwapKey(out, width, height, masterKey, true),
+        reverse: () => colSwapKey(out, width, height, masterKey, false)
     }];
 
     const operationsStandard = {
-        [STANDARDS.AESPASS]: {
-            do: () => doBlock(out, passwords),
-            reverse: () => undoBlock(out, passwords)
+        [STANDARDS.PSEUDOAES]: {
+            do: () => pseudoAES(out, width, height, passwords),
+            reverse: () => pseundoAES(out, width, height, passwords)
         }
     }
+
+    console.log(standardChoice);
     if (standardChoice == 0) {
         const activeOps = decrypt ? [...operationsFlags].reverse() : operationsFlags;
         activeOps.forEach(op => {
@@ -435,13 +476,6 @@ function colorUnshifter(data) {
     }
 }
 
-function doBlock(data, passwords) {
-    console.log("Do Block");
-}
-
-function doBlock(data, passwords) {
-    console.log("Undo Block");
-}
 function swapEndianness32(n) {
   return ((n & 0xFF) << 24) | 
     ((n & 0xFF00) << 8) | 
@@ -477,6 +511,58 @@ function reverseInteractions(data32) {
 
 
         data32[i] = (r | (g << 8) | (b << 16) | (a << 24));
+    }
+}
+
+function substitute(data) {
+    for (let i = 0; i < data.length; i++) {
+        let pixel = data[i];
+        let r = pixel & 0xFF;
+        let g = (pixel >> 8) & 0xFF;
+        let b = (pixel >> 16) & 0xFF;
+        let a = (pixel >> 24) & 0xFF;
+
+        data[i] = sBox[r] | (sBox[g] << 8) | (sBox[b] << 16) | (sBox[a] << 24)
+    }
+}
+
+function stitute(data) {
+    for (let i = 0; i < data.length; i++) {
+        let pixel = data[i];
+        let r = pixel & 0xFF;
+        let g = (pixel >> 8) & 0xFF;
+        let b = (pixel >> 16) & 0xFF;
+        let a = (pixel >> 24) & 0xFF;
+
+        data[i] = isBox[r] | (isBox[g] << 8) | (isBox[b] << 16) | (isBox[a] << 24)
+    }
+}
+
+function rowSwapKey(data, w, h, m, encrypt) {
+    // TODO
+}
+
+function colSwapKey(data, w, h, m, encrypt) {
+    // TODO, probably best to rearrange the data, rowSwap, then unrearrange the data lol
+}
+
+function pseudoAES(data, w, h, passwords) {
+    for (var i in passwords) {
+        applyPassword(data, i, passwords);
+        substitute(data);
+        rowSwapKey(data, w, h, i, true);
+        colSwapKey(data, w, h, i, true);
+        applyPassword(data, i, passwords);
+    }
+}
+
+function pseundoAES(data, w, h, passwords) {
+    for (var i in passwords) {
+        deplyPassword(data, i, passwords);
+        stitute(data);
+        colSwapKey(data, w, h, i, false);
+        rowSwapKey(data, w, h, i, false);
+        deplyPassword(data, i, passwords);
     }
 }
 
