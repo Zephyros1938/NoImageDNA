@@ -274,7 +274,7 @@ export function removeAlpha(pixels) {
     return data;
 }
 
-function applyPassword(data, mkey, keys = []) {
+function applyPassword(data, mkey, keys = []) { // probably should make it so that the key list isnt used
   for (let i = 0; i < data.length; i++) {
     data[i] ^= mkey;
     data[i] ^= keys[i % keys.length] | i;
@@ -533,7 +533,7 @@ function stitute(data) {
     }
 }
 
-function nextRandom(state) {
+function nextRandom(state) { // make this more cryptographically secure
     state ^= state << 13;
     state ^= state >>> 17;
     state ^= state << 5;
@@ -547,7 +547,7 @@ function rowSwapKey(data, w, h, m) {
     for (let i = h-1; i > 0; i--) {
         state = nextRandom(state);
 
-        const j = Math.floor(state * (i+1));
+        const j = Math.floor(state * (i+1) * 2.3283064365386963e-10);
 
         const a = i * w;
         const b = j * w;
@@ -561,15 +561,12 @@ function rowSwapKey(data, w, h, m) {
 
 function rowUnswapKey(data, w, h, m) {
     const temp = new Uint32Array(w);
-    function rseed(seed) {
-        const mn = Math.sin(seed) * 10000;
-        return mn - Math.floor(mn);
-    }
 
+    let state = m >>> 0;
     const swaps = [];
     for (let i = h-1; i > 0; i--) {
         state = nextRandom(state);
-        const j = Math.floor(state * (i+1));
+        const j = Math.floor(state * (i+1) * 2.3283064365386963e-10);
 
         swaps.push([i,j])
     }
@@ -611,7 +608,7 @@ function colUnswapKey(data, w, h, m) {
 }
 
 
-function pseudoAES(data, w, h, passwords) {
+function pseudoAES(data, w, h, passwords) { // maybe add ARX?
     for (let j = 0; j < passwords.length; j++) {
         let i = passwords[j];
         if (j%100==0) {
